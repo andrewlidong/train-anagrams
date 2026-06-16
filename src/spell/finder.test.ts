@@ -1,0 +1,43 @@
+import { describe, it, expect } from "vitest";
+import { buildComplexes, SubwayGraph } from "../data/buildGraph";
+import type { Station } from "../types";
+import { findPath } from "./finder";
+
+function station(name: string, complexId: string, routes: string[], lat: number, lng: number): Station {
+  return { stopId: name, name, complexId, borough: "M", routes, pos: { lat, lng } };
+}
+
+// A tiny network where F-A, A-C, C-E all share transfer complexes, so "FACE"
+// is fully ridable. Extra single-line stations give board/end points.
+const complexes = buildComplexes([
+  station("F end", "f0", ["F"], 40.700, -74.00),
+  station("F/A", "fa", ["F", "A"], 40.710, -74.00),
+  station("A/C", "ac", ["A", "C"], 40.720, -74.00),
+  station("C/E", "ce", ["C", "E"], 40.730, -74.00),
+  station("E end", "e0", ["E"], 40.740, -74.00),
+]);
+const graph = new SubwayGraph(complexes);
+
+describe("findPath", () => {
+  it("builds a feasible ride spelling a fully-lettered word", () => {
+    const result = findPath("FACE", graph);
+    expect(result.feasible).toBe(true);
+    const rides = result.legs.filter((l) => l.kind === "ride");
+    expect(rides.map((l) => (l as { line: string }).line)).toEqual(["F", "A", "C", "E"]);
+  });
+
+  it("represents missing letters as walking wildcard legs", () => {
+    const result = findPath("FOX", graph);
+    expect(result.missingLetters).toEqual(["O", "X"]);
+    const walkLetters = result.legs
+      .filter((l) => l.kind === "walk" && l.letter)
+      .map((l) => (l as { letter: string }).letter);
+    expect(walkLetters).toEqual(["O", "X"]);
+  });
+
+  it("handles a single-letter word", () => {
+    const result = findPath("A", graph);
+    expect(result.feasible).toBe(true);
+    expect(result.legs.filter((l) => l.kind === "ride")).toHaveLength(1);
+  });
+});
