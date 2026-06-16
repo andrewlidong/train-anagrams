@@ -268,7 +268,7 @@ export function findPath(word: string, graph: SubwayGraph): FinderResult {
 
   if (missing.length > 0) {
     notes.push(
-      `No train for ${missing.join(", ")} — we'll walk you to date spots starting with ${
+      `No train for ${missing.join(", ")} — we'll detour to a bar, café or restaurant starting with ${
         missing.length > 1 ? "those letters" : "that letter"
       }.`,
     );
