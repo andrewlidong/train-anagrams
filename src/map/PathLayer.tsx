@@ -4,6 +4,7 @@ import L from "leaflet";
 import type { ItineraryLeg } from "../spell/finder";
 import { routeColor, routeTextColor } from "../data/lineColors";
 import { traceLine, type LineIndex } from "./geometry";
+import { categoryEmoji } from "../date/venues";
 import type { LatLng } from "../types";
 
 const ll = (p: { lat: number; lng: number }): [number, number] => [p.lat, p.lng];
@@ -19,6 +20,16 @@ function bulletIcon(label: string, bg: string, fg: string, dashed = false): L.Di
     html: `<span class="leg-bullet${dashed ? " dashed" : ""}" style="background:${bg};color:${fg}">${label}</span>`,
     iconSize: [32, 32],
     iconAnchor: [16, 16],
+  });
+}
+
+/** A date-spot pin (emoji by category). */
+function venueIcon(emoji: string): L.DivIcon {
+  return L.divIcon({
+    className: "venue-icon",
+    html: `<span class="venue-pin"><span>${emoji}</span></span>`,
+    iconSize: [30, 30],
+    iconAnchor: [15, 28],
   });
 }
 
@@ -78,6 +89,13 @@ export function PathLayer({ legs, lineIndex }: Props) {
               icon={bulletIcon(leg.letter ?? "🚶", "#f4f4f5", "#333", true)}
               interactive={false}
             />
+            {leg.venue && (
+              <Marker position={ll(leg.to.pos)} icon={venueIcon(categoryEmoji(leg.venue.category))}>
+                <Tooltip direction="top">
+                  {leg.venue.name} ({leg.venue.category})
+                </Tooltip>
+              </Marker>
+            )}
           </Fragment>
         );
       })}

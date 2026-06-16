@@ -3,6 +3,7 @@ import type { MtaData } from "./types";
 import { loadMtaData } from "./data/fetchMta";
 import { SubwayGraph } from "./data/buildGraph";
 import { findPath, type FinderResult } from "./spell/finder";
+import { attachDateSpots } from "./date/venues";
 import { spelled } from "./spell/explore";
 import { spellableSuggestions } from "./spell/dictionary";
 import { SubwayMap } from "./map/SubwayMap";
@@ -17,7 +18,23 @@ export default function App() {
 
   const [mode, setMode] = useState<Mode>("finder");
   const [finderResult, setFinderResult] = useState<FinderResult | null>(null);
+  const [displayResult, setDisplayResult] = useState<FinderResult | null>(null);
   const [exploreLines, setExploreLines] = useState<string[]>([]);
+
+  // Resolve "missing letter" walks into real date spots (async, Overpass).
+  useEffect(() => {
+    if (!finderResult) {
+      setDisplayResult(null);
+      return;
+    }
+    setDisplayResult(finderResult); // show the train route immediately
+    if (finderResult.missingLetters.length === 0) return;
+    const ctrl = new AbortController();
+    attachDateSpots(finderResult, ctrl.signal)
+      .then((r) => setDisplayResult(r))
+      .catch(() => {});
+    return () => ctrl.abort();
+  }, [finderResult]);
 
   useEffect(() => {
     let cancelled = false;
@@ -38,7 +55,7 @@ export default function App() {
     [graph, exploreLines],
   );
   const activeLegs =
-    mode === "finder" ? (finderResult?.legs ?? []) : (exploreResult?.legs ?? []);
+    mode === "finder" ? (displayResult?.legs ?? []) : (exploreResult?.legs ?? []);
 
   if (error) {
     return (
@@ -73,7 +90,7 @@ export default function App() {
         {mode === "finder" ? (
           <>
             <WordInput onSubmit={(w) => setFinderResult(findPath(w, graph))} suggestions={suggestions} />
-            {finderResult && <Itinerary result={finderResult} />}
+            {displayResult && <Itinerary result={displayResult} />}
           </>
         ) : (
           <ExplorePanel graph={graph} lines={exploreLines} onChange={setExploreLines} />

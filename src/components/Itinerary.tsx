@@ -1,5 +1,6 @@
 import type { FinderResult } from "../spell/finder";
 import { isRealWord } from "../spell/dictionary";
+import { categoryEmoji } from "../date/venues";
 import { RouteBullet } from "./RouteBullet";
 
 interface Props {
@@ -39,17 +40,26 @@ export function Itinerary({ result }: Props) {
           </li>,
         );
       }
+    } else if (leg.letter && leg.venue) {
+      rows.push(
+        <li key={`w${i}`} className="step date-spot">
+          {categoryEmoji(leg.venue.category)}{" "}
+          <span>
+            Walk to <strong>{leg.venue.name}</strong> <em>({leg.venue.category})</em> for{" "}
+            <strong>{leg.letter}</strong> — {Math.round(leg.meters)} m
+          </span>
+        </li>,
+      );
+    } else if (leg.letter) {
+      rows.push(
+        <li key={`w${i}`} className="step walk">
+          🔎 Finding a <strong>{leg.letter}</strong> date spot…
+        </li>,
+      );
     } else {
       rows.push(
         <li key={`w${i}`} className="step walk">
-          🚶{" "}
-          {leg.letter ? (
-            <span>
-              Walk for <strong>{leg.letter}</strong> (no {leg.letter} train) — {Math.round(leg.meters)} m
-            </span>
-          ) : (
-            <span>Walk {Math.round(leg.meters)} m to transfer</span>
-          )}
+          🚶 Walk {Math.round(leg.meters)} m to transfer
         </li>,
       );
     }
