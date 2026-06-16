@@ -53,7 +53,7 @@ export function Itinerary({ result }: Props) {
     } else if (leg.letter) {
       rows.push(
         <li key={`w${i}`} className="step walk">
-          🔎 Finding a <strong>{leg.letter}</strong> date spot…
+          🔎 Finding a spot for <strong>{leg.letter}</strong>…
         </li>,
       );
     } else {
