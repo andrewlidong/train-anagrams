@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
-import { LayersControl, MapContainer, Polyline, TileLayer, useMap } from "react-leaflet";
+import { CircleMarker, LayersControl, MapContainer, Polyline, TileLayer, Tooltip, useMap } from "react-leaflet";
 import type { LatLngBoundsExpression } from "leaflet";
-import type { LineGeometry } from "../types";
+import type { Complex, LineGeometry } from "../types";
 import type { ItineraryLeg } from "../spell/finder";
 import { routeColor } from "../data/lineColors";
 import { PathLayer } from "./PathLayer";
@@ -12,6 +12,7 @@ const NYC_CENTER: [number, number] = [40.7306, -73.9866];
 
 interface Props {
   lines: LineGeometry[];
+  complexes: Complex[];
   legs: ItineraryLeg[];
 }
 
@@ -31,28 +32,61 @@ function FitToPath({ legs }: { legs: ItineraryLeg[] }) {
   return null;
 }
 
-export function SubwayMap({ lines, legs }: Props) {
+export function SubwayMap({ lines, complexes, legs }: Props) {
   const lineIndex = useMemo(() => buildLineIndex(lines), [lines]);
   const [playing, setPlaying] = useState(true);
+  const active = legs.length > 0;
 
-  // The full subway network, drawn boldly so it reads like a subway map.
+  // Real revenue routes only (drop peak-direction / non-revenue variants).
+  const drawn = useMemo(() => lines.filter((l) => !l.service.includes(" ")), [lines]);
+
+  // The full subway network drawn from real track geometry; dimmed when a
+  // route is highlighted so the spelled path stands out.
   const network = useMemo(
     () =>
-      lines.flatMap((line) =>
+      drawn.flatMap((line) =>
         line.paths.map((path, i) => (
           <Polyline
             key={`${line.service}-${i}`}
             positions={path.map((p) => [p.lat, p.lng] as [number, number])}
-            pathOptions={{ color: routeColor(line.service), weight: 3.5, opacity: 0.7, lineCap: "round" }}
+            pathOptions={{
+              color: routeColor(line.service),
+              weight: active ? 2.5 : 3.5,
+              opacity: active ? 0.3 : 0.9,
+              lineCap: "round",
+            }}
+            interactive={false}
           />
         )),
       ),
-    [lines],
+    [drawn, active],
+  );
+
+  // Station dots — make the map read like a transit map.
+  const stationDots = useMemo(
+    () =>
+      complexes.map((c) => (
+        <CircleMarker
+          key={c.id}
+          center={[c.pos.lat, c.pos.lng]}
+          radius={2.6}
+          pathOptions={{
+            color: "#374151",
+            weight: 1,
+            fillColor: "#ffffff",
+            fillOpacity: active ? 0.4 : 0.95,
+            opacity: active ? 0.4 : 0.9,
+          }}
+        >
+          <Tooltip direction="top">{c.name}</Tooltip>
+        </CircleMarker>
+      )),
+    [complexes, active],
   );
 
   return (
     <div className="map-shell">
-      <MapContainer center={NYC_CENTER} zoom={12} className="map" scrollWheelZoom>
+      <MapContainer center={NYC_CENTER} zoom={12} className="map" scrollWheelZoom preferCanvas>
         <LayersControl position="topright">
           <LayersControl.BaseLayer checked name="Clean">
             <TileLayer
@@ -76,12 +110,13 @@ export function SubwayMap({ lines, legs }: Props) {
           </LayersControl.BaseLayer>
         </LayersControl>
         {network}
+        {stationDots}
         <PathLayer legs={legs} lineIndex={lineIndex} />
         <TrainAnimation legs={legs} lineIndex={lineIndex} playing={playing} />
         <FitToPath legs={legs} />
       </MapContainer>
 
-      {legs.length > 0 && (
+      {active && (
         <button className="ride-toggle" onClick={() => setPlaying((p) => !p)}>
           {playing ? "⏸ Pause train" : "🚆 Run train"}
         </button>
