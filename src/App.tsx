@@ -86,7 +86,7 @@ export default function App() {
       </aside>
 
       <main className="map-wrap">
-        <SubwayMap lines={data.lines} legs={activeLegs} />
+        <SubwayMap lines={data.lines} complexes={data.complexes} legs={activeLegs} />
       </main>
     </div>
   );
