@@ -35,7 +35,9 @@ function FitToPath({ legs }: { legs: ItineraryLeg[] }) {
 export function SubwayMap({ lines, complexes, legs }: Props) {
   const lineIndex = useMemo(() => buildLineIndex(lines), [lines]);
   const [playing, setPlaying] = useState(true);
+  const [speed, setSpeed] = useState(1);
   const active = legs.length > 0;
+  const SPEEDS = [0.5, 1, 2, 4];
 
   // Real revenue routes only (drop peak-direction / non-revenue variants).
   const drawn = useMemo(() => lines.filter((l) => !l.service.includes(" ")), [lines]);
@@ -112,14 +114,23 @@ export function SubwayMap({ lines, complexes, legs }: Props) {
         {network}
         {stationDots}
         <PathLayer legs={legs} lineIndex={lineIndex} />
-        <TrainAnimation legs={legs} lineIndex={lineIndex} playing={playing} />
+        <TrainAnimation legs={legs} lineIndex={lineIndex} playing={playing} speed={speed} />
         <FitToPath legs={legs} />
       </MapContainer>
 
       {active && (
-        <button className="ride-toggle" onClick={() => setPlaying((p) => !p)}>
-          {playing ? "⏸ Pause train" : "🚆 Run train"}
-        </button>
+        <div className="map-controls">
+          <button className="ride-toggle" onClick={() => setPlaying((p) => !p)}>
+            {playing ? "⏸ Pause" : "🚆 Run"}
+          </button>
+          <div className="speed-control" role="group" aria-label="Train speed">
+            {SPEEDS.map((s) => (
+              <button key={s} className={s === speed ? "active" : ""} onClick={() => setSpeed(s)}>
+                {s}×
+              </button>
+            ))}
+          </div>
+        </div>
       )}
     </div>
   );

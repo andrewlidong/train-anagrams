@@ -24,13 +24,17 @@ interface Props {
   legs: ItineraryLeg[];
   lineIndex: LineIndex;
   playing: boolean;
+  /** Speed multiplier (1 = normal). */
+  speed: number;
 }
 
 /** Animates a little train marker along the full spelled route, looping. */
-export function TrainAnimation({ legs, lineIndex, playing }: Props) {
+export function TrainAnimation({ legs, lineIndex, playing, speed }: Props) {
   const map = useMap();
   const playingRef = useRef(playing);
   playingRef.current = playing;
+  const speedRef = useRef(speed);
+  speedRef.current = speed;
 
   useEffect(() => {
     // Flatten every leg into one continuous polyline with a per-segment color.
@@ -66,7 +70,7 @@ export function TrainAnimation({ legs, lineIndex, playing }: Props) {
     };
 
     const duration = Math.min(14, Math.max(4, total / 1200)); // seconds, distance-scaled
-    const speed = total / duration; // meters per second
+    const baseSpeed = total / duration; // meters per second at 1x
     const HOLD_MS = 700; // pause at each end before looping
 
     const marker = L.marker([points[0].lat, points[0].lng], {
@@ -92,7 +96,7 @@ export function TrainAnimation({ legs, lineIndex, playing }: Props) {
           dist = 0; // loop: resume from the start after the hold
           atEnd = false;
         } else {
-          dist += dt * speed;
+          dist += dt * baseSpeed * speedRef.current;
           if (dist >= total) {
             dist = total;
             atEnd = true;

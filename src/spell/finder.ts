@@ -18,6 +18,13 @@ export interface RideLeg {
   to: NamedPoint;
 }
 
+/** A real date spot (restaurant/cafe/bar) used to "spell" a letter with no train. */
+export interface DateSpot {
+  name: string;
+  category: string; // OSM amenity, e.g. "restaurant", "cafe", "bar"
+  pos: LatLng;
+}
+
 export interface WalkLeg {
   kind: "walk";
   /** The missing letter this walk represents, or null for a transfer walk. */
@@ -25,6 +32,8 @@ export interface WalkLeg {
   from: NamedPoint;
   to: NamedPoint;
   meters: number;
+  /** The date spot this walk leads to (resolved asynchronously after finding). */
+  venue?: DateSpot;
 }
 
 export type ItineraryLeg = RideLeg | WalkLeg;
@@ -259,9 +268,9 @@ export function findPath(word: string, graph: SubwayGraph): FinderResult {
 
   if (missing.length > 0) {
     notes.push(
-      `No train for ${missing.join(", ")} — bridged with walking legs (the subway has no ${missing.join(
-        "/",
-      )} line).`,
+      `No train for ${missing.join(", ")} — we'll walk you to date spots starting with ${
+        missing.length > 1 ? "those letters" : "that letter"
+      }.`,
     );
   }
 
