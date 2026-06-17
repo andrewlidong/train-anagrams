@@ -83,15 +83,20 @@ export default function App() {
     }
     setDisplayResult(finderResult);
     const ctrl = new AbortController();
+    let cancelled = false;
     (async () => {
       let r = finderResult;
       if (finderResult.missingLetters.length) {
         r = await attachDateSpots(finderResult, ctrl.signal);
-        setDisplayResult(r);
+        if (!cancelled) setDisplayResult(r);
       }
-      setDisplayResult(await attachWalkingPaths(r, ctrl.signal));
+      const withPaths = await attachWalkingPaths(r, ctrl.signal);
+      if (!cancelled) setDisplayResult(withPaths);
     })().catch(() => {});
-    return () => ctrl.abort();
+    return () => {
+      cancelled = true;
+      ctrl.abort();
+    };
   }, [finderResult]);
 
   const exploreResult = useMemo(
@@ -113,6 +118,15 @@ export default function App() {
     setVariant(0);
     setWord(upper);
     setRecents(addRecent(upper));
+  };
+
+  // Back to the empty landing state (Surprise me, suggestions, recents, faves).
+  const clearWord = () => {
+    setWord("");
+    const url = new URL(window.location.href);
+    url.searchParams.delete("word");
+    window.history.replaceState(null, "", url);
+    document.title = "Subway Spell";
   };
 
   const favWord = displayResult?.upper ?? "";
@@ -153,6 +167,7 @@ export default function App() {
           <>
             <WordInput
               onSubmit={runWord}
+              onClear={clearWord}
               suggestions={suggestions}
               recents={recents}
               favorites={favorites}
