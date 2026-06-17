@@ -36,3 +36,15 @@ export function randomSpellable(): string {
   if (pool.length === 0) return "face";
   return pool[Math.floor(Math.random() * pool.length)];
 }
+
+/** Common words spellable using only the given line letters (longest first). */
+export function wordsFromLetters(letters: Iterable<string>, limit = 60): string[] {
+  const allowed = new Set([...letters].map((c) => c.toUpperCase()));
+  const out: string[] = [];
+  for (const w of WORDS) {
+    if (w.length < 3) continue;
+    if ([...w.toUpperCase()].every((c) => allowed.has(c))) out.push(w);
+  }
+  out.sort((a, b) => b.length - a.length || a.localeCompare(b));
+  return out.slice(0, limit);
+}

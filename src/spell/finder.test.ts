@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { buildComplexes, SubwayGraph } from "../data/buildGraph";
 import type { Station } from "../types";
-import { findPath, tripStats } from "./finder";
+import { findPath, itineraryText, tripStats } from "./finder";
 
 function station(name: string, complexId: string, routes: string[], lat: number, lng: number): Station {
   return { stopId: name, name, complexId, borough: "M", routes, pos: { lat, lng } };
@@ -59,5 +59,18 @@ describe("findPath", () => {
     expect(stats.transfers).toBe(3);
     expect(stats.stations).toBeGreaterThan(1);
     expect(stats.minutes).toBeGreaterThanOrEqual(0);
+  });
+
+  it("accepts routing strategy + variant options and stays feasible", () => {
+    for (const strategy of ["scenic", "least-walk", "fastest"] as const) {
+      expect(findPath("FACE", graph, { strategy }).feasible).toBe(true);
+    }
+    expect(findPath("FACE", graph, { variant: 3 }).feasible).toBe(true);
+  });
+
+  it("renders itinerary text with ride lines", () => {
+    const text = itineraryText(findPath("FACE", graph));
+    expect(text).toContain("FACE");
+    expect(text).toContain("Ride");
   });
 });

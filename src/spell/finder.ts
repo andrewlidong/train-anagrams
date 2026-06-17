@@ -5,13 +5,37 @@ import type { Complex, LatLng } from "../types";
 import { SubwayGraph, WALK_TRANSFER_METERS, haversineMeters } from "../data/buildGraph";
 import { normalizeWord, wordToLegs, missingLetters, type WordLeg } from "./letters";
 
-// Routing preferences: minimize walking, treat subway rides as cheap (so a
-// longer ride is fine), and discourage stacking transfers at one station so the
-// route visits more distinct stations.
-const RIDE_WEIGHT = 0.25; // cost per meter ridden (rides are cheap)
-const WALK_WEIGHT = 10; // cost per meter walked (walking is expensive)
-const SAME_STATION_PENALTY = 1200; // penalty for transferring without changing station
+// Routing strategies trade off walking, ride length, and station variety.
+// "scenic" (default): minimize walking, rides cheap, spread across stations.
+// "least-walk": avoid walking above all. "fastest": minimize total travel time.
+export type RouteStrategy = "scenic" | "least-walk" | "fastest";
+
+interface Weights {
+  ride: number; // cost per meter ridden
+  walk: number; // cost per meter walked
+  samePenalty: number; // penalty for a transfer that doesn't change station
+}
+
+const STRATEGY_WEIGHTS: Record<RouteStrategy, Weights> = {
+  scenic: { ride: 0.25, walk: 10, samePenalty: 1200 },
+  "least-walk": { ride: 1, walk: 30, samePenalty: 0 },
+  fastest: { ride: 1, walk: 6, samePenalty: 0 },
+};
+
 const SAME_STATION_RIDE_M = 60; // a ride shorter than this counts as "same station"
+const JITTER_SCALE = 1200; // alternate-route variety
+
+export interface RouteOptions {
+  strategy?: RouteStrategy;
+  /** Bump to get a different but still-good route ("another route"). */
+  variant?: number;
+}
+
+// Deterministic pseudo-random in [0,1) so "another route" is repeatable.
+function jitter(seed: number): number {
+  const x = Math.sin(seed) * 10000;
+  return x - Math.floor(x);
+}
 
 export interface NamedPoint {
   name: string;
@@ -46,6 +70,8 @@ export interface WalkLeg {
   meters: number;
   /** The venue (bar/café/park/landmark) this walk leads to (resolved async). */
   venue?: DateSpot;
+  /** Real on-street walking geometry (resolved async via OSRM). */
+  path?: LatLng[];
 }
 
 export type ItineraryLeg = RideLeg | WalkLeg;
@@ -114,7 +140,7 @@ interface RunResult {
 }
 
 /** Solve a maximal run of consecutive train legs into an itinerary. */
-function solveTrainRun(wordLegs: WordLeg[], graph: SubwayGraph): RunResult | null {
+function solveTrainRun(wordLegs: WordLeg[], graph: SubwayGraph, w: Weights, variant: number): RunResult | null {
   const lines = wordLegs.map((l) => l.line!);
   const runLetters = wordLegs.map((l) => l.letters);
   if (lines.some((l) => graph.complexesServingLine(l).length === 0)) return null;
@@ -142,9 +168,10 @@ function solveTrainRun(wordLegs: WordLeg[], graph: SubwayGraph): RunResult | nul
     optionsPerT.push(opts);
   }
 
-  // Layered DP: minimize weighted cost (walking dear, rides cheap) while
-  // discouraging transfers that don't change station.
-  let prevCost = optionsPerT[0].map((o) => o.walk * WALK_WEIGHT);
+  // Layered DP over candidate transfer stations, weighted by the strategy.
+  let prevCost = optionsPerT[0].map(
+    (o, i) => o.walk * w.walk + (variant ? jitter(variant * 131 + i) * JITTER_SCALE : 0),
+  );
   const back: number[][] = [];
   for (let t = 1; t < k; t++) {
     const cur = optionsPerT[t];
@@ -152,10 +179,11 @@ function solveTrainRun(wordLegs: WordLeg[], graph: SubwayGraph): RunResult | nul
     const curCost = new Array<number>(cur.length).fill(Infinity);
     const curBack = new Array<number>(cur.length).fill(-1);
     for (let i = 0; i < cur.length; i++) {
+      const extra = variant ? jitter(variant * 131 + t * 17 + i * 7) * JITTER_SCALE : 0;
       for (let j = 0; j < prev.length; j++) {
         const ride = haversineMeters(prev[j].depart.pos, cur[i].arrive.pos);
-        let cost = prevCost[j] + ride * RIDE_WEIGHT + cur[i].walk * WALK_WEIGHT;
-        if (ride < SAME_STATION_RIDE_M) cost += SAME_STATION_PENALTY; // visit more stations
+        let cost = prevCost[j] + ride * w.ride + cur[i].walk * w.walk + extra;
+        if (ride < SAME_STATION_RIDE_M) cost += w.samePenalty; // visit more stations
         if (cost < curCost[i]) {
           curCost[i] = cost;
           curBack[i] = j;
@@ -250,7 +278,9 @@ function wildcardWalks(runs: string[], from: NamedPoint, to: NamedPoint): WalkLe
 }
 
 /** Find a ridable path that spells `word`. */
-export function findPath(word: string, graph: SubwayGraph): FinderResult {
+export function findPath(word: string, graph: SubwayGraph, opts: RouteOptions = {}): FinderResult {
+  const weights = STRATEGY_WEIGHTS[opts.strategy ?? "scenic"];
+  const variant = opts.variant ?? 0;
   const upper = normalizeWord(word);
   const wordLegs = wordToLegs(word);
   const missing = missingLetters(word);
@@ -278,7 +308,7 @@ export function findPath(word: string, graph: SubwayGraph): FinderResult {
       pendingWalks.push(...seg.legs.map((l) => l.letters));
       continue;
     }
-    const run = solveTrainRun(seg.legs, graph);
+    const run = solveTrainRun(seg.legs, graph, weights, variant);
     if (!run) {
       notes.push("Some lines in this word aren't in the data feed.");
       continue;
@@ -311,6 +341,23 @@ export function findPath(word: string, graph: SubwayGraph): FinderResult {
   }
 
   return { word, upper, legs: out, missingLetters: missing, feasible, notes };
+}
+
+/** A plain-text version of the itinerary, for copying/sharing. */
+export function itineraryText(result: FinderResult): string {
+  const lines = [`Subway Spell — "${result.upper}"`, ""];
+  for (const leg of result.legs) {
+    if (leg.kind === "ride") {
+      lines.push(`🚆 Ride ${leg.line}: ${leg.from.name} → ${leg.to.name}`);
+    } else if (leg.venue) {
+      lines.push(`🚶 Walk to ${leg.venue.name} (${leg.venue.category}) for ${leg.letters}`);
+    } else if (leg.letter) {
+      lines.push(`🚶 Walk for ${leg.letters}`);
+    } else {
+      lines.push(`🚶 Walk ${Math.round(leg.meters)} m to transfer`);
+    }
+  }
+  return lines.join("\n");
 }
 
 export interface TripStats {

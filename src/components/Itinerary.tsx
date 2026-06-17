@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { tripStats, type FinderResult } from "../spell/finder";
+import { itineraryText, tripStats, type FinderResult } from "../spell/finder";
 import { isRealWord } from "../spell/dictionary";
 import { categoryEmoji } from "../date/venues";
 import { wordShareUrl } from "../share";
@@ -8,12 +8,15 @@ import { RouteBullet } from "./RouteBullet";
 interface Props {
   result: FinderResult;
   activeLeg: number;
+  favorite: boolean;
+  onToggleFavorite: () => void;
 }
 
-export function Itinerary({ result, activeLeg }: Props) {
+export function Itinerary({ result, activeLeg, favorite, onToggleFavorite }: Props) {
   const { legs, upper, notes } = result;
   const real = isRealWord(upper);
   const [copied, setCopied] = useState(false);
+  const [copiedSteps, setCopiedSteps] = useState(false);
 
   if (legs.length === 0) {
     return (
@@ -30,6 +33,16 @@ export function Itinerary({ result, activeLeg }: Props) {
       await navigator.clipboard.writeText(wordShareUrl(window.location.href, upper));
       setCopied(true);
       setTimeout(() => setCopied(false), 1500);
+    } catch {
+      /* clipboard unavailable */
+    }
+  };
+
+  const copySteps = async () => {
+    try {
+      await navigator.clipboard.writeText(itineraryText(result));
+      setCopiedSteps(true);
+      setTimeout(() => setCopiedSteps(false), 1500);
     } catch {
       /* clipboard unavailable */
     }
@@ -85,11 +98,24 @@ export function Itinerary({ result, activeLeg }: Props) {
   return (
     <div className="itinerary">
       <div className="spelled-header">
+        <button
+          className="fav-btn"
+          onClick={onToggleFavorite}
+          title={favorite ? "Remove from favorites" : "Save to favorites"}
+        >
+          {favorite ? "★" : "☆"}
+        </button>
         <span className="spelled">{upper}</span>
         {real && <span className="real-badge">real word ✓</span>}
         {!result.feasible && <span className="warn-badge">no train route</span>}
+      </div>
+
+      <div className="itinerary-actions">
         <button className="copy-link" onClick={copyLink} title="Copy a shareable link to this route">
-          {copied ? "✓ Copied" : "🔗 Share"}
+          {copied ? "✓ Copied" : "🔗 Share link"}
+        </button>
+        <button className="copy-link" onClick={copySteps} title="Copy the itinerary as text">
+          {copiedSteps ? "✓ Copied" : "📋 Copy steps"}
         </button>
       </div>
 
