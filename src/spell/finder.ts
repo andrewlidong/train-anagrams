@@ -5,25 +5,26 @@ import type { Complex, LatLng } from "../types";
 import { SubwayGraph, WALK_TRANSFER_METERS, haversineMeters } from "../data/buildGraph";
 import { normalizeWord, wordToLegs, missingLetters, type WordLeg } from "./letters";
 
-// Routing strategies trade off walking, ride length, and station variety.
-// "scenic" (default): minimize walking, rides cheap, spread across stations.
-// "least-walk": avoid walking above all. "fastest": minimize total travel time.
+// Every strategy strongly avoids walking and strongly prefers actually riding a
+// train between distinct stations (rather than transferring in place). They
+// differ only in how much ride length matters once those are satisfied.
+//   walk >> samePenalty >> ride  — so it never walks to dodge a same-station
+//   transfer, and never picks a same-station transfer when a real ride exists.
 export type RouteStrategy = "scenic" | "least-walk" | "fastest";
 
 interface Weights {
   ride: number; // cost per meter ridden
-  walk: number; // cost per meter walked
+  walk: number; // cost per meter walked (kept very high to minimize walking)
   samePenalty: number; // penalty for a transfer that doesn't change station
 }
 
 const STRATEGY_WEIGHTS: Record<RouteStrategy, Weights> = {
-  scenic: { ride: 0.25, walk: 10, samePenalty: 1200 },
-  "least-walk": { ride: 1, walk: 30, samePenalty: 0 },
-  fastest: { ride: 1, walk: 6, samePenalty: 0 },
+  scenic: { ride: 0.1, walk: 60, samePenalty: 6000 }, // rides cheap → spread out, always ride
+  "least-walk": { ride: 0.5, walk: 120, samePenalty: 1500 }, // accept a boring transfer over any walk
+  fastest: { ride: 1, walk: 60, samePenalty: 6000 }, // nearest distinct station → short real rides
 };
 
 const SAME_STATION_RIDE_M = 60; // a ride shorter than this counts as "same station"
-const JITTER_SCALE = 1200; // alternate-route variety
 
 export interface RouteOptions {
   strategy?: RouteStrategy;
@@ -168,10 +169,13 @@ function solveTrainRun(wordLegs: WordLeg[], graph: SubwayGraph, w: Weights, vari
     optionsPerT.push(opts);
   }
 
+  // Jitter for "another route": big enough to reshuffle which distinct station
+  // is chosen, but capped below samePenalty/walk so it never turns a real ride
+  // into a same-station transfer or a walk.
+  const jitterScale = variant ? Math.min(w.samePenalty * 0.4, 1500) : 0;
+
   // Layered DP over candidate transfer stations, weighted by the strategy.
-  let prevCost = optionsPerT[0].map(
-    (o, i) => o.walk * w.walk + (variant ? jitter(variant * 131 + i) * JITTER_SCALE : 0),
-  );
+  let prevCost = optionsPerT[0].map((o, i) => o.walk * w.walk + jitter(variant * 131 + i) * jitterScale);
   const back: number[][] = [];
   for (let t = 1; t < k; t++) {
     const cur = optionsPerT[t];
@@ -179,11 +183,11 @@ function solveTrainRun(wordLegs: WordLeg[], graph: SubwayGraph, w: Weights, vari
     const curCost = new Array<number>(cur.length).fill(Infinity);
     const curBack = new Array<number>(cur.length).fill(-1);
     for (let i = 0; i < cur.length; i++) {
-      const extra = variant ? jitter(variant * 131 + t * 17 + i * 7) * JITTER_SCALE : 0;
+      const extra = jitter(variant * 131 + t * 17 + i * 7) * jitterScale;
       for (let j = 0; j < prev.length; j++) {
         const ride = haversineMeters(prev[j].depart.pos, cur[i].arrive.pos);
         let cost = prevCost[j] + ride * w.ride + cur[i].walk * w.walk + extra;
-        if (ride < SAME_STATION_RIDE_M) cost += w.samePenalty; // visit more stations
+        if (ride < SAME_STATION_RIDE_M) cost += w.samePenalty; // force a real ride between transfers
         if (cost < curCost[i]) {
           curCost[i] = cost;
           curBack[i] = j;
