@@ -595,6 +595,19 @@ footer a {
   padding: 3px 5px;
   margin: 0 -5px;
 }
+.steps-toggle {
+  align-self: flex-start;
+  border: none;
+  background: transparent;
+  color: var(--accent);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 4px 0;
+}
+.itinerary ol {
+  margin-top: 8px;
+}
 
 @media (max-width: 720px) {
   .app {
