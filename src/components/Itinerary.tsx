@@ -17,7 +17,6 @@ export function Itinerary({ result, activeLeg, favorite, onToggleFavorite }: Pro
   const real = isRealWord(upper);
   const [copied, setCopied] = useState(false);
   const [copiedSteps, setCopiedSteps] = useState(false);
-  const [showSteps, setShowSteps] = useState(false);
 
   if (legs.length === 0) {
     return (
@@ -126,11 +125,7 @@ export function Itinerary({ result, activeLeg, favorite, onToggleFavorite }: Pro
         {stats.walkKm > 0.05 && <> · 🚶 {stats.walkKm.toFixed(1)} km</>}
       </div>
 
-      <button className="steps-toggle" onClick={() => setShowSteps((s) => !s)}>
-        {showSteps ? "▾ Hide" : "▸ Show"} step-by-step ({stats.trains + legs.filter((l) => l.kind === "walk").length})
-      </button>
-      {showSteps && <ol>{rows}</ol>}
-
+      <ol>{rows}</ol>
       {notes.length > 0 && (
         <ul className="notes">
           {notes.map((n, i) => (
