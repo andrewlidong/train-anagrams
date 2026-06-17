@@ -5,6 +5,14 @@ import type { Complex, LatLng } from "../types";
 import { SubwayGraph, WALK_TRANSFER_METERS, haversineMeters } from "../data/buildGraph";
 import { normalizeWord, wordToLegs, missingLetters, type WordLeg } from "./letters";
 
+// Routing preferences: minimize walking, treat subway rides as cheap (so a
+// longer ride is fine), and discourage stacking transfers at one station so the
+// route visits more distinct stations.
+const RIDE_WEIGHT = 0.25; // cost per meter ridden (rides are cheap)
+const WALK_WEIGHT = 10; // cost per meter walked (walking is expensive)
+const SAME_STATION_PENALTY = 1200; // penalty for transferring without changing station
+const SAME_STATION_RIDE_M = 60; // a ride shorter than this counts as "same station"
+
 export interface NamedPoint {
   name: string;
   pos: LatLng;
@@ -126,8 +134,9 @@ function solveTrainRun(lines: string[], graph: SubwayGraph): RunResult | null {
     optionsPerT.push(opts);
   }
 
-  // Layered DP: minimize total ride + walk distance.
-  let prevCost = optionsPerT[0].map((o) => o.walk);
+  // Layered DP: minimize weighted cost (walking dear, rides cheap) while
+  // discouraging transfers that don't change station.
+  let prevCost = optionsPerT[0].map((o) => o.walk * WALK_WEIGHT);
   const back: number[][] = [];
   for (let t = 1; t < k; t++) {
     const cur = optionsPerT[t];
@@ -137,7 +146,8 @@ function solveTrainRun(lines: string[], graph: SubwayGraph): RunResult | null {
     for (let i = 0; i < cur.length; i++) {
       for (let j = 0; j < prev.length; j++) {
         const ride = haversineMeters(prev[j].depart.pos, cur[i].arrive.pos);
-        const cost = prevCost[j] + ride + cur[i].walk;
+        let cost = prevCost[j] + ride * RIDE_WEIGHT + cur[i].walk * WALK_WEIGHT;
+        if (ride < SAME_STATION_RIDE_M) cost += SAME_STATION_PENALTY; // visit more stations
         if (cost < curCost[i]) {
           curCost[i] = cost;
           curBack[i] = j;
