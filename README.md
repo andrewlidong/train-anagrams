@@ -10,8 +10,8 @@ make, and the whole trip is drawn on a geographic NYC map with an animated train
 ## Two modes
 - **Spell a word** (finder) — type a word and the app finds a ridable path whose line letters
   spell it, with a step-by-step itinerary and the route drawn on the map. Letters with no train
-  (`H I K O P T U V X Y`) become a short walk to a real bar, café, or restaurant starting with
-  that letter (live from OpenStreetMap, with a curated fallback).
+  (`H I K O P T U V X Y`) become a short walk to a real bar, café, park, or landmark starting
+  with that letter (live from OpenStreetMap, with a curated fallback).
 - **Explore** — start on any line and follow real transfers one stop at a time, watching the
   string you're spelling grow (with a "real word ✓" badge).
 
@@ -46,7 +46,7 @@ npm run build:wordlist  # regenerate src/data/words.ts from a common-word list
 src/
   data/    fetchMta.ts · buildGraph.ts · lineColors.ts · words.ts (generated)
   spell/   letters.ts · finder.ts · explore.ts · dictionary.ts
-  date/    venues.ts (no-train letters → real bar/café/restaurant via Overpass)
+  date/    venues.ts (no-train letters → real bar/café/park/landmark via Overpass)
   map/     SubwayMap.tsx · PathLayer.tsx · TrainAnimation.tsx · geometry.ts
   components/  ModeToggle · WordInput · Itinerary · ExplorePanel · RouteBullet
   App.tsx · main.tsx · styles.css
