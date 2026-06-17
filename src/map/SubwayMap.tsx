@@ -1,6 +1,7 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { CircleMarker, LayersControl, MapContainer, Polyline, TileLayer, Tooltip, useMap } from "react-leaflet";
 import type { LatLngBoundsExpression } from "leaflet";
+import { toPng } from "html-to-image";
 import type { Complex, LineGeometry } from "../types";
 import type { ItineraryLeg } from "../spell/finder";
 import { routeColor } from "../data/lineColors";
@@ -17,7 +18,11 @@ interface Props {
   legs: ItineraryLeg[];
   activeLeg: number;
   onLegChange: (legIndex: number) => void;
+  word: string;
 }
+
+// Skip controls (but keep the spelling strip + attribution) when exporting.
+const EXCLUDE_CLASSES = ["map-controls", "leaflet-control-zoom", "leaflet-control-layers"];
 
 /** Pans/zooms the map to fit the active path whenever it changes. */
 function FitToPath({ legs }: { legs: ItineraryLeg[] }) {
@@ -35,12 +40,37 @@ function FitToPath({ legs }: { legs: ItineraryLeg[] }) {
   return null;
 }
 
-export function SubwayMap({ lines, complexes, legs, activeLeg, onLegChange }: Props) {
+export function SubwayMap({ lines, complexes, legs, activeLeg, onLegChange, word }: Props) {
   const lineIndex = useMemo(() => buildLineIndex(lines), [lines]);
   const [playing, setPlaying] = useState(true);
   const [speed, setSpeed] = useState(1);
+  const [saving, setSaving] = useState(false);
+  const shellRef = useRef<HTMLDivElement>(null);
   const active = legs.length > 0;
   const SPEEDS = [0.5, 1, 2, 4];
+
+  const saveImage = async () => {
+    if (!shellRef.current) return;
+    setSaving(true);
+    try {
+      const dataUrl = await toPng(shellRef.current, {
+        pixelRatio: 2,
+        backgroundColor: "#11151c",
+        filter: (node) => {
+          const cls = (node as HTMLElement).classList;
+          return !cls || !EXCLUDE_CLASSES.some((c) => cls.contains(c));
+        },
+      });
+      const a = document.createElement("a");
+      a.href = dataUrl;
+      a.download = `subway-spell-${word || "route"}.png`;
+      a.click();
+    } catch {
+      /* export failed (e.g. tainted canvas) */
+    } finally {
+      setSaving(false);
+    }
+  };
 
   // Real revenue routes only (drop peak-direction / non-revenue variants).
   const drawn = useMemo(() => lines.filter((l) => !l.service.includes(" ")), [lines]);
@@ -90,7 +120,7 @@ export function SubwayMap({ lines, complexes, legs, activeLeg, onLegChange }: Pr
   );
 
   return (
-    <div className="map-shell">
+    <div className="map-shell" ref={shellRef}>
       <MapContainer center={NYC_CENTER} zoom={12} className="map" scrollWheelZoom preferCanvas>
         <LayersControl position="topright">
           <LayersControl.BaseLayer checked name="Clean">
@@ -98,6 +128,7 @@ export function SubwayMap({ lines, complexes, legs, activeLeg, onLegChange }: Pr
               attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>'
               url="https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png"
               subdomains="abcd"
+              crossOrigin="anonymous"
             />
           </LayersControl.BaseLayer>
           <LayersControl.BaseLayer name="Dark">
@@ -105,12 +136,14 @@ export function SubwayMap({ lines, complexes, legs, activeLeg, onLegChange }: Pr
               attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>'
               url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
               subdomains="abcd"
+              crossOrigin="anonymous"
             />
           </LayersControl.BaseLayer>
           <LayersControl.BaseLayer name="Streets">
             <TileLayer
               attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
               url="https://tile.openstreetmap.org/{z}/{x}/{y}.png"
+              crossOrigin="anonymous"
             />
           </LayersControl.BaseLayer>
         </LayersControl>
@@ -135,6 +168,9 @@ export function SubwayMap({ lines, complexes, legs, activeLeg, onLegChange }: Pr
               </button>
             ))}
           </div>
+          <button className="ride-toggle" onClick={saveImage} disabled={saving} title="Download this route as a PNG">
+            {saving ? "…" : "📷 Save"}
+          </button>
         </div>
       )}
     </div>

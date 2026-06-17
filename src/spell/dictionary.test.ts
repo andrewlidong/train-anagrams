@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { isFullyRidable, randomSpellable, spellableSuggestions } from "./dictionary";
+import { isFullyRidable, randomSpellable, spellableSuggestions, wordsFromLetters } from "./dictionary";
 
 describe("dictionary", () => {
   it("isFullyRidable rejects words with no-train letters", () => {
@@ -20,5 +20,14 @@ describe("dictionary", () => {
       expect(w.length).toBeGreaterThanOrEqual(4);
       expect(w.length).toBeLessThanOrEqual(9);
     }
+  });
+
+  it("wordsFromLetters only returns words using the given letters", () => {
+    const letters = "CAB".split("");
+    const words = wordsFromLetters(letters, 50);
+    expect(words.length).toBeGreaterThan(0);
+    expect(words.every((w) => [...w.toUpperCase()].every((c) => letters.includes(c)))).toBe(true);
+    // Fewer letters → no more words than a superset.
+    expect(words.length).toBeLessThanOrEqual(wordsFromLetters("CABDE".split(""), 500).length);
   });
 });

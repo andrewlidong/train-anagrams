@@ -47,7 +47,9 @@ export function TrainAnimation({ legs, lineIndex, playing, speed, onLegChange }:
     const segLeg: number[] = [];
     legs.forEach((leg, li) => {
       const pts =
-        leg.kind === "ride" ? traceLine(lineIndex, leg.line, leg.from.pos, leg.to.pos) : [leg.from.pos, leg.to.pos];
+        leg.kind === "ride"
+          ? traceLine(lineIndex, leg.line, leg.from.pos, leg.to.pos)
+          : (leg.path ?? [leg.from.pos, leg.to.pos]);
       const color = leg.kind === "ride" ? routeColor(leg.line) : "#555";
       for (const p of pts) {
         if (points.length > 0) {

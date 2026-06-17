@@ -7,9 +7,11 @@ import { randomSpellable } from "../spell/dictionary";
 interface Props {
   onSubmit: (word: string) => void;
   suggestions: string[];
+  recents: string[];
+  favorites: string[];
 }
 
-export function WordInput({ onSubmit, suggestions }: Props) {
+export function WordInput({ onSubmit, suggestions, recents, favorites }: Props) {
   const [value, setValue] = useState("");
   const upper = normalizeWord(value);
 
@@ -66,6 +68,28 @@ export function WordInput({ onSubmit, suggestions }: Props) {
           </button>
         ))}
       </div>
+
+      {favorites.length > 0 && (
+        <div className="suggestions">
+          <span className="suggestions-label">★</span>
+          {favorites.map((w) => (
+            <button key={w} className="chip" onClick={() => submit(w)}>
+              {w}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {recents.length > 0 && (
+        <div className="suggestions">
+          <span className="suggestions-label">Recent</span>
+          {recents.map((w) => (
+            <button key={w} className="chip" onClick={() => submit(w)}>
+              {w}
+            </button>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

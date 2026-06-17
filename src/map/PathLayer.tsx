@@ -78,11 +78,12 @@ export function PathLayer({ legs, lineIndex }: Props) {
             </Fragment>
           );
         }
-        const mid = midpoint([leg.from.pos, leg.to.pos]);
+        const walkPts = leg.path ?? [leg.from.pos, leg.to.pos];
+        const mid = midpoint(walkPts);
         return (
           <Fragment key={`leg-${i}`}>
             <Polyline
-              positions={[ll(leg.from.pos), ll(leg.to.pos)]}
+              positions={walkPts.map(ll)}
               pathOptions={{ color: "#444", weight: 4, opacity: 0.85, dashArray: "4 8" }}
             />
             {leg.venue && leg.letter ? (

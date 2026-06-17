@@ -509,8 +509,12 @@ footer a {
   margin: 6px 0 10px;
   line-height: 1.6;
 }
+.itinerary-actions {
+  display: flex;
+  gap: 8px;
+  margin: 8px 0 4px;
+}
 .copy-link {
-  margin-left: auto;
   border: 1px solid var(--border);
   background: #1a212b;
   color: var(--panel-fg);
@@ -521,6 +525,63 @@ footer a {
 }
 .copy-link:hover {
   border-color: var(--accent);
+}
+.fav-btn {
+  border: none;
+  background: transparent;
+  color: #fbbf24;
+  font-size: 22px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0;
+}
+
+/* Route options */
+.route-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.route-options .opt {
+  border: 1px solid var(--border);
+  background: #1a212b;
+  color: var(--panel-fg);
+  border-radius: 16px;
+  padding: 5px 11px;
+  font-size: 12px;
+  cursor: pointer;
+}
+.route-options .opt.active {
+  background: var(--accent);
+  border-color: var(--accent);
+  font-weight: 600;
+}
+
+/* Reverse mode */
+.reverse-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.reverse-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.reverse-actions button {
+  border: 1px solid var(--border);
+  background: #1a212b;
+  color: var(--panel-fg);
+  border-radius: 8px;
+  padding: 5px 12px;
+  cursor: pointer;
+}
+.reverse-words {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  max-height: 320px;
+  overflow-y: auto;
 }
 .chip.surprise {
   background: #2563eb;

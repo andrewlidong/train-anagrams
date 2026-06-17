@@ -2,41 +2,41 @@ import { useEffect, useMemo, useState } from "react";
 import type { MtaData } from "./types";
 import { loadMtaData } from "./data/fetchMta";
 import { SubwayGraph } from "./data/buildGraph";
-import { findPath, type FinderResult } from "./spell/finder";
+import { findPath, type FinderResult, type RouteStrategy } from "./spell/finder";
+import { normalizeWord } from "./spell/letters";
 import { attachDateSpots } from "./date/venues";
+import { attachWalkingPaths } from "./data/walking";
 import { spelled } from "./spell/explore";
 import { spellableSuggestions } from "./spell/dictionary";
 import { readWordFromUrl } from "./share";
+import { addRecent, getFavorites, getRecents, toggleFavorite } from "./storage";
 import { SubwayMap } from "./map/SubwayMap";
 import { ModeToggle, type Mode } from "./components/ModeToggle";
 import { WordInput } from "./components/WordInput";
 import { Itinerary } from "./components/Itinerary";
 import { ExplorePanel } from "./components/ExplorePanel";
+import { ReversePanel } from "./components/ReversePanel";
+
+const STRATEGIES: { key: RouteStrategy; label: string }[] = [
+  { key: "scenic", label: "More stops" },
+  { key: "least-walk", label: "Least walking" },
+  { key: "fastest", label: "Fastest" },
+];
 
 export default function App() {
   const [data, setData] = useState<MtaData | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const [mode, setMode] = useState<Mode>("finder");
+  const [word, setWord] = useState("");
+  const [strategy, setStrategy] = useState<RouteStrategy>("scenic");
+  const [variant, setVariant] = useState(0);
   const [finderResult, setFinderResult] = useState<FinderResult | null>(null);
   const [displayResult, setDisplayResult] = useState<FinderResult | null>(null);
   const [exploreLines, setExploreLines] = useState<string[]>([]);
   const [activeLeg, setActiveLeg] = useState(0);
-
-  // Resolve "missing letter" walks into real date spots (async, Overpass).
-  useEffect(() => {
-    if (!finderResult) {
-      setDisplayResult(null);
-      return;
-    }
-    setDisplayResult(finderResult); // show the train route immediately
-    if (finderResult.missingLetters.length === 0) return;
-    const ctrl = new AbortController();
-    attachDateSpots(finderResult, ctrl.signal)
-      .then((r) => setDisplayResult(r))
-      .catch(() => {});
-    return () => ctrl.abort();
-  }, [finderResult]);
+  const [recents, setRecents] = useState<string[]>(() => getRecents());
+  const [favorites, setFavorites] = useState<string[]>(() => getFavorites());
 
   useEffect(() => {
     let cancelled = false;
@@ -49,42 +49,75 @@ export default function App() {
   }, []);
 
   const graph = useMemo(() => (data ? new SubwayGraph(data.complexes) : null), [data]);
-  const suggestions = useMemo(() => (data ? spellableSuggestions(14) : []), [data]);
+  const suggestions = useMemo(() => (data ? spellableSuggestions(12) : []), [data]);
 
-  // Whichever mode is active determines the path drawn on the map.
+  // On first load, take a word from the URL (?word=FACE) if present.
+  useEffect(() => {
+    if (!graph) return;
+    const w = readWordFromUrl(window.location.search);
+    if (w) {
+      setMode("finder");
+      setWord(w);
+      setRecents(addRecent(w));
+    }
+  }, [graph]);
+
+  // Recompute the route when the word, strategy, or variant changes.
+  useEffect(() => {
+    if (!graph || !word) {
+      setFinderResult(null);
+      return;
+    }
+    setFinderResult(findPath(word, graph, { strategy, variant }));
+    const url = new URL(window.location.href);
+    url.searchParams.set("word", word);
+    window.history.replaceState(null, "", url);
+    document.title = `${word} · Subway Spell`;
+  }, [graph, word, strategy, variant]);
+
+  // Resolve venue stops (Overpass) then on-street walking geometry (OSRM).
+  useEffect(() => {
+    if (!finderResult) {
+      setDisplayResult(null);
+      return;
+    }
+    setDisplayResult(finderResult);
+    const ctrl = new AbortController();
+    (async () => {
+      let r = finderResult;
+      if (finderResult.missingLetters.length) {
+        r = await attachDateSpots(finderResult, ctrl.signal);
+        setDisplayResult(r);
+      }
+      setDisplayResult(await attachWalkingPaths(r, ctrl.signal));
+    })().catch(() => {});
+    return () => ctrl.abort();
+  }, [finderResult]);
+
   const exploreResult = useMemo(
     () => (graph && exploreLines.length ? findPath(spelled(exploreLines), graph) : null),
     [graph, exploreLines],
   );
   const activeLegs =
-    mode === "finder" ? (displayResult?.legs ?? []) : (exploreResult?.legs ?? []);
-
-  // Run a word: compute the path and reflect it in the URL + title (shareable).
-  const runWord = (word: string) => {
-    if (!graph) return;
-    const res = findPath(word, graph);
-    setFinderResult(res);
-    const url = new URL(window.location.href);
-    if (res.upper) url.searchParams.set("word", res.upper);
-    else url.searchParams.delete("word");
-    window.history.replaceState(null, "", url);
-    document.title = res.upper ? `${res.upper} · Subway Spell` : "Subway Spell";
-  };
-
-  // On first load, run a word from the URL (?word=FACE) if present.
-  useEffect(() => {
-    if (!graph) return;
-    const w = readWordFromUrl(window.location.search);
-    if (w) {
-      setFinderResult(findPath(w, graph));
-      document.title = `${w} · Subway Spell`;
-    }
-  }, [graph]);
+    mode === "finder" ? (displayResult?.legs ?? []) : mode === "explore" ? (exploreResult?.legs ?? []) : [];
 
   // Reset the highlighted leg whenever the drawn path changes.
   useEffect(() => {
     setActiveLeg(0);
   }, [displayResult, exploreResult, mode]);
+
+  const runWord = (w: string) => {
+    const upper = normalizeWord(w);
+    if (!upper) return;
+    setMode("finder");
+    setVariant(0);
+    setWord(upper);
+    setRecents(addRecent(upper));
+  };
+
+  const favWord = displayResult?.upper ?? "";
+  const isFav = favorites.includes(favWord);
+  const activeWord = mode === "finder" ? favWord : mode === "explore" ? spelled(exploreLines) : "";
 
   if (error) {
     return (
@@ -116,17 +149,42 @@ export default function App() {
 
         <ModeToggle mode={mode} onChange={setMode} />
 
-        {mode === "finder" ? (
+        {mode === "finder" && (
           <>
-            <WordInput onSubmit={runWord} suggestions={suggestions} />
-            {displayResult && <Itinerary result={displayResult} activeLeg={activeLeg} />}
+            <WordInput onSubmit={runWord} suggestions={suggestions} recents={recents} favorites={favorites} />
+            {displayResult && (
+              <div className="route-options">
+                {STRATEGIES.map((s) => (
+                  <button
+                    key={s.key}
+                    className={`opt${s.key === strategy ? " active" : ""}`}
+                    onClick={() => setStrategy(s.key)}
+                  >
+                    {s.label}
+                  </button>
+                ))}
+                <button className="opt" onClick={() => setVariant((v) => v + 1)}>
+                  🔀 Another route
+                </button>
+              </div>
+            )}
+            {displayResult && (
+              <Itinerary
+                result={displayResult}
+                activeLeg={activeLeg}
+                favorite={isFav}
+                onToggleFavorite={() => favWord && setFavorites(toggleFavorite(favWord))}
+              />
+            )}
           </>
-        ) : (
-          <ExplorePanel graph={graph} lines={exploreLines} onChange={setExploreLines} />
         )}
 
+        {mode === "explore" && <ExplorePanel graph={graph} lines={exploreLines} onChange={setExploreLines} />}
+
+        {mode === "reverse" && <ReversePanel graph={graph} onPick={runWord} />}
+
         <footer>
-          Data: <a href="https://data.ny.gov">MTA / NY State Open Data</a>. Map ©{" "}
+          Data: <a href="https://data.ny.gov">MTA / NY State Open Data</a> · venues ©{" "}
           <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>.
         </footer>
       </aside>
@@ -138,6 +196,7 @@ export default function App() {
           legs={activeLegs}
           activeLeg={activeLeg}
           onLegChange={setActiveLeg}
+          word={activeWord}
         />
       </main>
     </div>
