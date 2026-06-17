@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { LETTER_LINES, MISSING_LETTERS, isLetterLine } from "../data/lineColors";
+import { isLetterLine } from "../data/lineColors";
 import { RouteBullet } from "./RouteBullet";
 import { normalizeWord } from "../spell/letters";
 import { randomSpellable } from "../spell/dictionary";
@@ -9,9 +9,11 @@ interface Props {
   suggestions: string[];
   recents: string[];
   favorites: string[];
+  /** Show discovery chips (surprise / suggestions / recents) — hidden once a route is shown. */
+  showExtras: boolean;
 }
 
-export function WordInput({ onSubmit, suggestions, recents, favorites }: Props) {
+export function WordInput({ onSubmit, suggestions, recents, favorites, showExtras }: Props) {
   const [value, setValue] = useState("");
   const upper = normalizeWord(value);
 
@@ -54,41 +56,41 @@ export function WordInput({ onSubmit, suggestions, recents, favorites }: Props) 
         </div>
       )}
 
-      <div className="hint">
-        Trains for: {LETTER_LINES.join(" ")} &nbsp;·&nbsp; no train for: {MISSING_LETTERS.join(" ")}
-      </div>
-
-      <div className="suggestions">
-        <button className="chip surprise" onClick={() => submit(randomSpellable().toUpperCase())}>
-          🎲 Surprise me
-        </button>
-        {suggestions.map((w) => (
-          <button key={w} className="chip" onClick={() => submit(w.toUpperCase())}>
-            {w}
-          </button>
-        ))}
-      </div>
-
-      {favorites.length > 0 && (
-        <div className="suggestions">
-          <span className="suggestions-label">★</span>
-          {favorites.map((w) => (
-            <button key={w} className="chip" onClick={() => submit(w)}>
-              {w}
+      {showExtras && (
+        <>
+          <div className="suggestions">
+            <button className="chip surprise" onClick={() => submit(randomSpellable().toUpperCase())}>
+              🎲 Surprise me
             </button>
-          ))}
-        </div>
-      )}
+            {suggestions.map((w) => (
+              <button key={w} className="chip" onClick={() => submit(w.toUpperCase())}>
+                {w}
+              </button>
+            ))}
+          </div>
 
-      {recents.length > 0 && (
-        <div className="suggestions">
-          <span className="suggestions-label">Recent</span>
-          {recents.map((w) => (
-            <button key={w} className="chip" onClick={() => submit(w)}>
-              {w}
-            </button>
-          ))}
-        </div>
+          {favorites.length > 0 && (
+            <div className="suggestions">
+              <span className="suggestions-label">★</span>
+              {favorites.map((w) => (
+                <button key={w} className="chip" onClick={() => submit(w)}>
+                  {w}
+                </button>
+              ))}
+            </div>
+          )}
+
+          {recents.length > 0 && (
+            <div className="suggestions">
+              <span className="suggestions-label">Recent</span>
+              {recents.map((w) => (
+                <button key={w} className="chip" onClick={() => submit(w)}>
+                  {w}
+                </button>
+              ))}
+            </div>
+          )}
+        </>
       )}
     </div>
   );

@@ -15,7 +15,7 @@ export function ModeToggle({ mode, onChange }: Props) {
         🧭 Explore
       </button>
       <button className={mode === "reverse" ? "active" : ""} onClick={() => onChange("reverse")}>
-        🔡 What can I spell?
+        🔡 Reverse
       </button>
     </div>
   );

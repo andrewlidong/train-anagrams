@@ -34,7 +34,7 @@ body,
   padding: 18px;
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 13px;
 }
 
 .panel header h1 {
@@ -135,13 +135,14 @@ body,
 }
 .mode-toggle button {
   flex: 1;
-  padding: 9px;
+  padding: 9px 6px;
   border-radius: 8px;
   border: 1px solid var(--border);
   background: #1a212b;
   color: var(--panel-fg);
   cursor: pointer;
-  font-size: 14px;
+  font-size: 13px;
+  white-space: nowrap;
 }
 .mode-toggle button.active {
   background: var(--accent);
