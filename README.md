@@ -1,6 +1,6 @@
 # 🚇 Subway Spell
 
-### ▶︎ Live: **https://andrewlidong.github.io/subway-spell/**
+### ▶︎ Live: **https://andrewlidong.github.io/train-anagrams/**
 
 Spell words by **riding NYC subway lines**. The lettered trains (A, C, E, F, J, L, M, N, Q,
 R, W, Z, B, D, G, S) are literally letters — so to spell **FACE** you ride the **F**, transfer
