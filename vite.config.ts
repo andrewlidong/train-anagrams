@@ -29,6 +29,10 @@ export default defineConfig(({ command }) => ({
       },
       workbox: {
         // App shell precached; data + tiles cached at runtime so it works offline.
+        // Take control immediately and drop old precaches so updates aren't stale.
+        clientsClaim: true,
+        skipWaiting: true,
+        cleanupOutdatedCaches: true,
         globPatterns: ["**/*.{js,css,html,svg,png,woff2}"],
         runtimeCaching: [
           {
