@@ -2,8 +2,10 @@
 import { isLetterLine } from "../data/lineColors";
 
 export interface WordLeg {
-  /** The single uppercase letter this leg spells. */
+  /** The single uppercase letter this leg's line/venue represents. */
   letter: string;
+  /** The run of identical letters this leg covers, e.g. "ZZ" in JAZZ. */
+  letters: string;
   /** "train" if a lettered line exists; "walk" for a missing-letter wildcard. */
   type: "train" | "walk";
   /** The subway line ridden (same as `letter`) for train legs. */
@@ -16,22 +18,23 @@ export function normalizeWord(word: string): string {
 }
 
 /**
- * Convert a word into legs. Consecutive identical letters collapse into one
- * leg (you can't transfer from a line to itself), since riding a line once
- * already "spells" that letter.
+ * Convert a word into legs. Consecutive identical letters are grouped into one
+ * leg (you can't transfer from a line to itself), but the run is recorded in
+ * `letters` so doubled letters like the ZZ in JAZZ are still shown.
  */
 export function wordToLegs(word: string): WordLeg[] {
-  const letters = normalizeWord(word);
   const legs: WordLeg[] = [];
-  let prev = "";
-  for (const letter of letters) {
-    if (letter === prev) continue; // collapse doubles (e.g. JAZZ -> J A Z)
-    prev = letter;
-    if (isLetterLine(letter)) {
-      legs.push({ letter, type: "train", line: letter });
-    } else {
-      legs.push({ letter, type: "walk" });
+  for (const letter of normalizeWord(word)) {
+    const last = legs[legs.length - 1];
+    if (last && last.letter === letter) {
+      last.letters += letter; // extend the run (e.g. JAZZ -> J A ZZ)
+      continue;
     }
+    legs.push(
+      isLetterLine(letter)
+        ? { letter, letters: letter, type: "train", line: letter }
+        : { letter, letters: letter, type: "walk" },
+    );
   }
   return legs;
 }

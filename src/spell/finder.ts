@@ -21,6 +21,8 @@ export interface NamedPoint {
 export interface RideLeg {
   kind: "ride";
   letter: string;
+  /** The run of letters this ride spells (e.g. "ZZ" in JAZZ). */
+  letters: string;
   line: string;
   from: NamedPoint;
   to: NamedPoint;
@@ -37,10 +39,12 @@ export interface WalkLeg {
   kind: "walk";
   /** The missing letter this walk represents, or null for a transfer walk. */
   letter: string | null;
+  /** The run of letters this walk spells ("" for a plain transfer walk). */
+  letters: string;
   from: NamedPoint;
   to: NamedPoint;
   meters: number;
-  /** The date spot this walk leads to (resolved asynchronously after finding). */
+  /** The venue (bar/café/park/landmark) this walk leads to (resolved async). */
   venue?: DateSpot;
 }
 
@@ -109,8 +113,10 @@ interface RunResult {
   notes: string[];
 }
 
-/** Solve a maximal run of consecutive train lines into an itinerary. */
-function solveTrainRun(lines: string[], graph: SubwayGraph): RunResult | null {
+/** Solve a maximal run of consecutive train legs into an itinerary. */
+function solveTrainRun(wordLegs: WordLeg[], graph: SubwayGraph): RunResult | null {
+  const lines = wordLegs.map((l) => l.line!);
+  const runLetters = wordLegs.map((l) => l.letters);
   if (lines.some((l) => graph.complexesServingLine(l).length === 0)) return null;
   const notes: string[] = [];
 
@@ -119,7 +125,9 @@ function solveTrainRun(lines: string[], graph: SubwayGraph): RunResult | null {
     const board = cs[0];
     const end = nearestOther(cs, board) ?? board;
     return {
-      legs: [{ kind: "ride", letter: lines[0], line: lines[0], from: point(board), to: point(end) }],
+      legs: [
+        { kind: "ride", letter: lines[0], letters: runLetters[0], line: lines[0], from: point(board), to: point(end) },
+      ],
       boardPoint: point(board),
       endPoint: point(end),
       notes,
@@ -170,11 +178,18 @@ function solveTrainRun(lines: string[], graph: SubwayGraph): RunResult | null {
     nearestOther(graph.complexesServingLine(lines[k]), opts[k - 1].depart) ?? opts[k - 1].depart;
 
   const legs: ItineraryLeg[] = [];
-  legs.push({ kind: "ride", letter: lines[0], line: lines[0], from: point(board), to: point(opts[0].arrive) });
+  legs.push({
+    kind: "ride",
+    letter: lines[0],
+    letters: runLetters[0],
+    line: lines[0],
+    from: point(board),
+    to: point(opts[0].arrive),
+  });
   for (let t = 0; t < k; t++) {
     const o = opts[t];
     if (o.walk > 0 && o.arrive.id !== o.depart.id) {
-      legs.push({ kind: "walk", letter: null, from: point(o.arrive), to: point(o.depart), meters: o.walk });
+      legs.push({ kind: "walk", letter: null, letters: "", from: point(o.arrive), to: point(o.depart), meters: o.walk });
       if (o.walk > WALK_TRANSFER_METERS) {
         notes.push(
           `No direct transfer from ${lines[t]} to ${lines[t + 1]} — a ${Math.round(
@@ -184,7 +199,14 @@ function solveTrainRun(lines: string[], graph: SubwayGraph): RunResult | null {
       }
     }
     const to = t + 1 < k ? point(opts[t + 1].arrive) : point(end);
-    legs.push({ kind: "ride", letter: lines[t + 1], line: lines[t + 1], from: point(o.depart), to });
+    legs.push({
+      kind: "ride",
+      letter: lines[t + 1],
+      letters: runLetters[t + 1],
+      line: lines[t + 1],
+      from: point(o.depart),
+      to,
+    });
   }
 
   return { legs, boardPoint: point(board), endPoint: point(end), notes };
@@ -198,10 +220,13 @@ function offset(p: LatLng, i: number): LatLng {
   return { lat: p.lat + 0.0016 * (i + 1), lng: p.lng + 0.0016 * (i + 1) };
 }
 
-/** Build walk legs for a stretch of missing letters between two anchor points. */
-function wildcardWalks(letters: string[], from: NamedPoint, to: NamedPoint): WalkLeg[] {
+/**
+ * Build walk legs for a stretch of missing-letter runs between two anchor
+ * points. Each entry of `runs` is a run of identical letters (e.g. "OO").
+ */
+function wildcardWalks(runs: string[], from: NamedPoint, to: NamedPoint): WalkLeg[] {
   const legs: WalkLeg[] = [];
-  const n = letters.length;
+  const n = runs.length;
   let prev = from.pos;
   let prevName = from.name;
   for (let i = 0; i < n; i++) {
@@ -209,10 +234,11 @@ function wildcardWalks(letters: string[], from: NamedPoint, to: NamedPoint): Wal
     const pos = lerp(from.pos, to.pos, frac);
     const isLast = i === n - 1;
     const next = isLast ? to.pos : pos;
-    const nextName = isLast ? to.name : `walk (${letters[i]})`;
+    const nextName = isLast ? to.name : `walk (${runs[i]})`;
     legs.push({
       kind: "walk",
-      letter: letters[i],
+      letter: runs[i][0],
+      letters: runs[i],
       from: { name: prevName, pos: prev },
       to: { name: nextName, pos: next },
       meters: haversineMeters(prev, next),
@@ -249,10 +275,10 @@ export function findPath(word: string, graph: SubwayGraph): FinderResult {
 
   for (const seg of segments) {
     if (seg.type === "walk") {
-      pendingWalks.push(...seg.legs.map((l) => l.letter));
+      pendingWalks.push(...seg.legs.map((l) => l.letters));
       continue;
     }
-    const run = solveTrainRun(seg.legs.map((l) => l.line!), graph);
+    const run = solveTrainRun(seg.legs, graph);
     if (!run) {
       notes.push("Some lines in this word aren't in the data feed.");
       continue;
@@ -285,4 +311,35 @@ export function findPath(word: string, graph: SubwayGraph): FinderResult {
   }
 
   return { word, upper, legs: out, missingLetters: missing, feasible, notes };
+}
+
+export interface TripStats {
+  trains: number;
+  transfers: number;
+  stations: number;
+  rideKm: number;
+  walkKm: number;
+  minutes: number;
+}
+
+/** Rough trip statistics for an itinerary (distances are straight-line estimates). */
+export function tripStats(legs: ItineraryLeg[]): TripStats {
+  let rideM = 0;
+  let walkM = 0;
+  let trains = 0;
+  const stations = new Set<string>();
+  for (const leg of legs) {
+    if (leg.kind === "ride") {
+      trains++;
+      rideM += haversineMeters(leg.from.pos, leg.to.pos);
+      stations.add(leg.from.name);
+      stations.add(leg.to.name);
+    } else {
+      walkM += leg.meters;
+    }
+  }
+  const transfers = Math.max(0, trains - 1);
+  // ~30 km/h subway incl. stops, ~5 km/h walk, ~2.5 min per transfer.
+  const minutes = Math.round(rideM / 500 + walkM / 83 + transfers * 2.5);
+  return { trains, transfers, stations: stations.size, rideKm: rideM / 1000, walkKm: walkM / 1000, minutes };
 }

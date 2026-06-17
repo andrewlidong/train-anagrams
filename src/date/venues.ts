@@ -30,7 +30,7 @@ export function categoryEmoji(category: string): string {
 }
 
 /** Map raw OSM tags into one of our buckets: bar / café / park / landmark. */
-function classify(tags: Record<string, string>): string {
+export function classify(tags: Record<string, string>): string {
   if (tags.leisure === "park") return "park";
   if (tags.tourism || tags.historic) return "landmark";
   if (tags.amenity === "cafe") return "café";

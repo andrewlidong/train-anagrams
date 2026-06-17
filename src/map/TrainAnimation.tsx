@@ -26,29 +26,37 @@ interface Props {
   playing: boolean;
   /** Speed multiplier (1 = normal). */
   speed: number;
+  /** Called when the train crosses into a new leg (by index). */
+  onLegChange?: (legIndex: number) => void;
 }
 
 /** Animates a little train marker along the full spelled route, looping. */
-export function TrainAnimation({ legs, lineIndex, playing, speed }: Props) {
+export function TrainAnimation({ legs, lineIndex, playing, speed, onLegChange }: Props) {
   const map = useMap();
   const playingRef = useRef(playing);
   playingRef.current = playing;
   const speedRef = useRef(speed);
   speedRef.current = speed;
+  const onLegChangeRef = useRef(onLegChange);
+  onLegChangeRef.current = onLegChange;
 
   useEffect(() => {
     // Flatten every leg into one continuous polyline with a per-segment color.
     const points: LatLng[] = [];
     const segColor: string[] = [];
-    for (const leg of legs) {
+    const segLeg: number[] = [];
+    legs.forEach((leg, li) => {
       const pts =
         leg.kind === "ride" ? traceLine(lineIndex, leg.line, leg.from.pos, leg.to.pos) : [leg.from.pos, leg.to.pos];
       const color = leg.kind === "ride" ? routeColor(leg.line) : "#555";
       for (const p of pts) {
-        if (points.length > 0) segColor.push(color);
+        if (points.length > 0) {
+          segColor.push(color);
+          segLeg.push(li);
+        }
         points.push(p);
       }
-    }
+    });
     if (points.length < 2) return;
 
     // Cumulative distance along the path for constant-speed motion.
@@ -57,16 +65,17 @@ export function TrainAnimation({ legs, lineIndex, playing, speed }: Props) {
     const total = cum[cum.length - 1];
     if (total <= 0) return;
 
-    const sample = (d: number): { pos: LatLng; color: string } => {
-      if (d <= 0) return { pos: points[0], color: segColor[0] };
+    const sample = (d: number): { pos: LatLng; color: string; leg: number } => {
+      if (d <= 0) return { pos: points[0], color: segColor[0], leg: segLeg[0] };
       for (let i = 0; i < segColor.length; i++) {
         if (d <= cum[i + 1]) {
           const segLen = cum[i + 1] - cum[i];
           const f = segLen > 0 ? (d - cum[i]) / segLen : 0;
-          return { pos: lerp(points[i], points[i + 1], f), color: segColor[i] };
+          return { pos: lerp(points[i], points[i + 1], f), color: segColor[i], leg: segLeg[i] };
         }
       }
-      return { pos: points[points.length - 1], color: segColor[segColor.length - 1] };
+      const last = segColor.length - 1;
+      return { pos: points[points.length - 1], color: segColor[last], leg: segLeg[last] };
     };
 
     const duration = Math.min(14, Math.max(4, total / 1200)); // seconds, distance-scaled
@@ -84,6 +93,7 @@ export function TrainAnimation({ legs, lineIndex, playing, speed }: Props) {
     let holdUntil = 0;
     let atEnd = false;
     let lastColor = segColor[0];
+    let lastLeg = -1;
     let raf = 0;
 
     const step = (ts: number) => {
@@ -103,11 +113,15 @@ export function TrainAnimation({ legs, lineIndex, playing, speed }: Props) {
             holdUntil = ts + HOLD_MS;
           }
         }
-        const { pos, color } = sample(dist);
+        const { pos, color, leg } = sample(dist);
         marker.setLatLng([pos.lat, pos.lng]);
         if (color !== lastColor) {
           marker.setIcon(trainIcon(color));
           lastColor = color;
+        }
+        if (leg !== lastLeg) {
+          lastLeg = leg;
+          onLegChangeRef.current?.(leg);
         }
       }
       raf = requestAnimationFrame(step);
