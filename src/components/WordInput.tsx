@@ -6,6 +6,7 @@ import { randomSpellable } from "../spell/dictionary";
 
 interface Props {
   onSubmit: (word: string) => void;
+  onClear: () => void;
   suggestions: string[];
   recents: string[];
   favorites: string[];
@@ -13,13 +14,18 @@ interface Props {
   showExtras: boolean;
 }
 
-export function WordInput({ onSubmit, suggestions, recents, favorites, showExtras }: Props) {
+export function WordInput({ onSubmit, onClear, suggestions, recents, favorites, showExtras }: Props) {
   const [value, setValue] = useState("");
   const upper = normalizeWord(value);
 
   const submit = (word: string) => {
     setValue(word);
     onSubmit(word);
+  };
+
+  const clear = () => {
+    setValue("");
+    onClear();
   };
 
   return (
@@ -53,6 +59,17 @@ export function WordInput({ onSubmit, suggestions, recents, favorites, showExtra
               </span>
             ),
           )}
+        </div>
+      )}
+
+      {!showExtras && (
+        <div className="suggestions">
+          <button className="chip surprise" onClick={() => submit(randomSpellable().toUpperCase())}>
+            🎲 Surprise me
+          </button>
+          <button className="chip" onClick={clear}>
+            ✕ New search
+          </button>
         </div>
       )}
 
