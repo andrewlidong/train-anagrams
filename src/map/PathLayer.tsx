@@ -23,15 +23,16 @@ function bulletIcon(label: string, bg: string, fg: string, dashed = false): L.Di
   });
 }
 
-/** A date-spot pin (emoji by category). */
-function venueIcon(emoji: string): L.DivIcon {
+/** A non-subway (venue) stop, shown as its big capitalized letter. */
+function venueLetterIcon(letter: string): L.DivIcon {
   return L.divIcon({
-    className: "venue-icon",
-    html: `<span class="venue-pin"><span>${emoji}</span></span>`,
-    iconSize: [30, 30],
-    iconAnchor: [15, 28],
+    className: "venue-letter-icon",
+    html: `<span class="venue-letter">${letter}</span>`,
+    iconSize: [34, 34],
+    iconAnchor: [17, 17],
   });
 }
+
 
 interface MarkerInfo {
   pos: [number, number];
@@ -84,17 +85,19 @@ export function PathLayer({ legs, lineIndex }: Props) {
               positions={[ll(leg.from.pos), ll(leg.to.pos)]}
               pathOptions={{ color: "#444", weight: 4, opacity: 0.85, dashArray: "4 8" }}
             />
-            <Marker
-              position={ll(mid)}
-              icon={bulletIcon(leg.letter ?? "🚶", "#f4f4f5", "#333", true)}
-              interactive={false}
-            />
-            {leg.venue && (
-              <Marker position={ll(leg.to.pos)} icon={venueIcon(categoryEmoji(leg.venue.category))}>
+            {leg.venue && leg.letter ? (
+              // Non-subway stop: show its big capitalized letter; name on hover.
+              <Marker position={ll(leg.to.pos)} icon={venueLetterIcon(leg.letter)}>
                 <Tooltip direction="top">
-                  {leg.venue.name} ({leg.venue.category})
+                  {categoryEmoji(leg.venue.category)} {leg.venue.name} ({leg.venue.category})
                 </Tooltip>
               </Marker>
+            ) : (
+              <Marker
+                position={ll(mid)}
+                icon={bulletIcon(leg.letter ?? "🚶", "#f4f4f5", "#333", true)}
+                interactive={false}
+              />
             )}
           </Fragment>
         );

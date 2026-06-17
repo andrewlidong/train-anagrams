@@ -406,25 +406,25 @@ footer a {
   border-color: #777;
 }
 
-.leaflet-div-icon.venue-icon {
+.leaflet-div-icon.venue-letter-icon {
   background: transparent;
   border: none;
 }
-.venue-pin {
+.venue-letter {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 30px;
-  height: 30px;
-  border-radius: 50% 50% 50% 0;
-  transform: rotate(-45deg);
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
   background: #fff;
-  border: 2px solid #db2777;
-  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.4);
-  font-size: 15px;
-}
-.venue-pin > span {
-  transform: rotate(45deg);
+  border: 3px solid #db2777;
+  color: #db2777;
+  font-weight: 800;
+  font-size: 20px;
+  line-height: 1;
+  font-family: Helvetica, Arial, sans-serif;
+  box-shadow: 0 1px 5px rgba(0, 0, 0, 0.5);
 }
 
 .step.date-spot {
