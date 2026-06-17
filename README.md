@@ -27,8 +27,11 @@ make, and the whole trip is drawn on a geographic NYC map with an animated train
 - **Shareable links** (`?word=FACE`), **save the route as a PNG**, **copy the itinerary as text**,
   plus **recent searches** and **favorites** (localStorage).
 - **Installable PWA** — works offline after first load (app shell, MTA data, and map tiles are
-  cached by a service worker).
+  cached by a service worker that auto-updates and reloads onto the newest build).
 - **Trip stats** — trains, transfers, stops, est. time, and walking distance.
+
+Built with **React + TypeScript + Vite**, **Leaflet** for the map, and **Vitest** for tests.
+No backend — everything runs in the browser against public open-data APIs.
 
 ## How it works
 1. **Live data** is fetched once and cached in `localStorage`, from NY State open data (Socrata):
@@ -39,9 +42,11 @@ make, and the whole trip is drawn on a geographic NYC map with an animated train
    ~400 m (out-of-system walking transfer).
 3. **Path-finding** — each lettered train is a single line, so a word fixes the exact line
    sequence (`MADAGASCAR` → M·A·D·A·G·A·S·C·A·R). Finding the trip is then a small **layered
-   shortest-path** that picks the best transfer station between each pair of lines, weighted by
-   the chosen routing strategy (`src/spell/finder.ts`). Doubled letters ride the line once but are
-   still shown (the ZZ in JAZZ), and gaps with no real transfer fall back to a walk.
+   shortest-path** that picks the best transfer station between each pair of lines
+   (`src/spell/finder.ts`). The cost weights strongly **minimize walking** and **force a real ride
+   between distinct stations** (rather than transferring in place), tuned per routing strategy.
+   Doubled letters ride the line once but are still shown (the ZZ in JAZZ), and gaps with no real
+   transfer fall back to a walk.
 4. **Map** — **Leaflet + CARTO/OpenStreetMap** basemaps with the full network drawn in official
    MTA colors. The spelled route is traced along the **real track geometry** (each ride is
    projected onto its line's polyline), and an **animated train** rides the whole path with
