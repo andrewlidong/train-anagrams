@@ -2,6 +2,7 @@ import { useState } from "react";
 import { LETTER_LINES, MISSING_LETTERS, isLetterLine } from "../data/lineColors";
 import { RouteBullet } from "./RouteBullet";
 import { normalizeWord } from "../spell/letters";
+import { randomSpellable } from "../spell/dictionary";
 
 interface Props {
   onSubmit: (word: string) => void;
@@ -56,7 +57,9 @@ export function WordInput({ onSubmit, suggestions }: Props) {
       </div>
 
       <div className="suggestions">
-        <span className="suggestions-label">Try:</span>
+        <button className="chip surprise" onClick={() => submit(randomSpellable().toUpperCase())}>
+          🎲 Surprise me
+        </button>
         {suggestions.map((w) => (
           <button key={w} className="chip" onClick={() => submit(w.toUpperCase())}>
             {w}

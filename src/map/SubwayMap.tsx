@@ -6,6 +6,7 @@ import type { ItineraryLeg } from "../spell/finder";
 import { routeColor } from "../data/lineColors";
 import { PathLayer } from "./PathLayer";
 import { TrainAnimation } from "./TrainAnimation";
+import { SpellingStrip } from "../components/SpellingStrip";
 import { buildLineIndex } from "./geometry";
 
 const NYC_CENTER: [number, number] = [40.7306, -73.9866];
@@ -14,6 +15,8 @@ interface Props {
   lines: LineGeometry[];
   complexes: Complex[];
   legs: ItineraryLeg[];
+  activeLeg: number;
+  onLegChange: (legIndex: number) => void;
 }
 
 /** Pans/zooms the map to fit the active path whenever it changes. */
@@ -32,7 +35,7 @@ function FitToPath({ legs }: { legs: ItineraryLeg[] }) {
   return null;
 }
 
-export function SubwayMap({ lines, complexes, legs }: Props) {
+export function SubwayMap({ lines, complexes, legs, activeLeg, onLegChange }: Props) {
   const lineIndex = useMemo(() => buildLineIndex(lines), [lines]);
   const [playing, setPlaying] = useState(true);
   const [speed, setSpeed] = useState(1);
@@ -114,9 +117,11 @@ export function SubwayMap({ lines, complexes, legs }: Props) {
         {network}
         {stationDots}
         <PathLayer legs={legs} lineIndex={lineIndex} />
-        <TrainAnimation legs={legs} lineIndex={lineIndex} playing={playing} speed={speed} />
+        <TrainAnimation legs={legs} lineIndex={lineIndex} playing={playing} speed={speed} onLegChange={onLegChange} />
         <FitToPath legs={legs} />
       </MapContainer>
+
+      {active && <SpellingStrip legs={legs} activeLeg={activeLeg} />}
 
       {active && (
         <div className="map-controls">

@@ -6,6 +6,7 @@ import { findPath, type FinderResult } from "./spell/finder";
 import { attachDateSpots } from "./date/venues";
 import { spelled } from "./spell/explore";
 import { spellableSuggestions } from "./spell/dictionary";
+import { readWordFromUrl } from "./share";
 import { SubwayMap } from "./map/SubwayMap";
 import { ModeToggle, type Mode } from "./components/ModeToggle";
 import { WordInput } from "./components/WordInput";
@@ -20,6 +21,7 @@ export default function App() {
   const [finderResult, setFinderResult] = useState<FinderResult | null>(null);
   const [displayResult, setDisplayResult] = useState<FinderResult | null>(null);
   const [exploreLines, setExploreLines] = useState<string[]>([]);
+  const [activeLeg, setActiveLeg] = useState(0);
 
   // Resolve "missing letter" walks into real date spots (async, Overpass).
   useEffect(() => {
@@ -57,6 +59,33 @@ export default function App() {
   const activeLegs =
     mode === "finder" ? (displayResult?.legs ?? []) : (exploreResult?.legs ?? []);
 
+  // Run a word: compute the path and reflect it in the URL + title (shareable).
+  const runWord = (word: string) => {
+    if (!graph) return;
+    const res = findPath(word, graph);
+    setFinderResult(res);
+    const url = new URL(window.location.href);
+    if (res.upper) url.searchParams.set("word", res.upper);
+    else url.searchParams.delete("word");
+    window.history.replaceState(null, "", url);
+    document.title = res.upper ? `${res.upper} · Subway Spell` : "Subway Spell";
+  };
+
+  // On first load, run a word from the URL (?word=FACE) if present.
+  useEffect(() => {
+    if (!graph) return;
+    const w = readWordFromUrl(window.location.search);
+    if (w) {
+      setFinderResult(findPath(w, graph));
+      document.title = `${w} · Subway Spell`;
+    }
+  }, [graph]);
+
+  // Reset the highlighted leg whenever the drawn path changes.
+  useEffect(() => {
+    setActiveLeg(0);
+  }, [displayResult, exploreResult, mode]);
+
   if (error) {
     return (
       <div className="fullscreen-message">
@@ -89,8 +118,8 @@ export default function App() {
 
         {mode === "finder" ? (
           <>
-            <WordInput onSubmit={(w) => setFinderResult(findPath(w, graph))} suggestions={suggestions} />
-            {displayResult && <Itinerary result={displayResult} />}
+            <WordInput onSubmit={runWord} suggestions={suggestions} />
+            {displayResult && <Itinerary result={displayResult} activeLeg={activeLeg} />}
           </>
         ) : (
           <ExplorePanel graph={graph} lines={exploreLines} onChange={setExploreLines} />
@@ -103,7 +132,13 @@ export default function App() {
       </aside>
 
       <main className="map-wrap">
-        <SubwayMap lines={data.lines} complexes={data.complexes} legs={activeLegs} />
+        <SubwayMap
+          lines={data.lines}
+          complexes={data.complexes}
+          legs={activeLegs}
+          activeLeg={activeLeg}
+          onLegChange={setActiveLeg}
+        />
       </main>
     </div>
   );

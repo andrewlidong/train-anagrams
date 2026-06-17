@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { buildComplexes, SubwayGraph } from "../data/buildGraph";
 import type { Station } from "../types";
-import { findPath } from "./finder";
+import { findPath, tripStats } from "./finder";
 
 function station(name: string, complexId: string, routes: string[], lat: number, lng: number): Station {
   return { stopId: name, name, complexId, borough: "M", routes, pos: { lat, lng } };
@@ -39,5 +39,25 @@ describe("findPath", () => {
     const result = findPath("A", graph);
     expect(result.feasible).toBe(true);
     expect(result.legs.filter((l) => l.kind === "ride")).toHaveLength(1);
+  });
+
+  it("preserves doubled letters in the leg run", () => {
+    // FACEE: the final E is doubled and should ride E once but spell "EE".
+    const result = findPath("FACEE", graph);
+    const eLeg = result.legs.find((l) => l.kind === "ride" && l.line === "E");
+    expect((eLeg as { letters: string }).letters).toBe("EE");
+    const spelled = result.legs
+      .filter((l) => l.letters)
+      .map((l) => l.letters)
+      .join("");
+    expect(spelled).toBe("FACEE");
+  });
+
+  it("reports trip stats", () => {
+    const stats = tripStats(findPath("FACE", graph).legs);
+    expect(stats.trains).toBe(4);
+    expect(stats.transfers).toBe(3);
+    expect(stats.stations).toBeGreaterThan(1);
+    expect(stats.minutes).toBeGreaterThanOrEqual(0);
   });
 });

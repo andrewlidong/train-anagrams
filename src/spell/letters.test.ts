@@ -14,8 +14,12 @@ describe("wordToLegs", () => {
     expect(legs.every((l) => l.type === "train")).toBe(true);
   });
 
-  it("collapses consecutive duplicate letters", () => {
-    expect(wordToLegs("JAZZ").map((l) => l.letter)).toEqual(["J", "A", "Z"]);
+  it("groups consecutive duplicate letters but records the run", () => {
+    const legs = wordToLegs("JAZZ");
+    expect(legs.map((l) => l.letter)).toEqual(["J", "A", "Z"]);
+    expect(legs.map((l) => l.letters)).toEqual(["J", "A", "ZZ"]);
+    // The full word is recoverable from the runs.
+    expect(legs.map((l) => l.letters).join("")).toBe("JAZZ");
   });
 
   it("marks letters with no line as walk legs", () => {

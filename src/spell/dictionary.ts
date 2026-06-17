@@ -29,3 +29,10 @@ export function spellableSuggestions(limit = 30): string[] {
   matches.sort((a, b) => b.length - a.length || a.localeCompare(b));
   return matches.slice(0, limit);
 }
+
+/** A random common word worth riding — fully spellable, 4–9 letters. */
+export function randomSpellable(): string {
+  const pool = spellableSuggestions(500).filter((w) => w.length >= 4 && w.length <= 9);
+  if (pool.length === 0) return "face";
+  return pool[Math.floor(Math.random() * pool.length)];
+}
