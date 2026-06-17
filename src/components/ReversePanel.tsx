@@ -12,7 +12,7 @@ interface Props {
 /** Pick the lines you'll ride, see which real words you can spell with them. */
 export function ReversePanel({ graph, onPick }: Props) {
   const lines = useMemo(() => startingLines(graph), [graph]);
-  const [selected, setSelected] = useState<Set<string>>(() => new Set(lines));
+  const [selected, setSelected] = useState<Set<string>>(() => new Set());
 
   const toggle = (l: string) =>
     setSelected((prev) => {
@@ -25,7 +25,7 @@ export function ReversePanel({ graph, onPick }: Props) {
 
   return (
     <div className="reverse-panel">
-      <p className="explore-prompt">Pick the lines you'll ride:</p>
+      <p className="explore-prompt">Tap the lines you'll ride to turn them on:</p>
       <div className="bullet-row">
         {lines.map((l) => (
           <RouteBullet key={l} route={l} size={32} onClick={() => toggle(l)} dimmed={!selected.has(l)} />

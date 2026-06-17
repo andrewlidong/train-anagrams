@@ -151,7 +151,13 @@ export default function App() {
 
         {mode === "finder" && (
           <>
-            <WordInput onSubmit={runWord} suggestions={suggestions} recents={recents} favorites={favorites} />
+            <WordInput
+              onSubmit={runWord}
+              suggestions={suggestions}
+              recents={recents}
+              favorites={favorites}
+              showExtras={!displayResult}
+            />
             {displayResult && (
               <div className="route-options">
                 {STRATEGIES.map((s) => (
