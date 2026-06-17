@@ -3,6 +3,7 @@ import { isLetterLine } from "../data/lineColors";
 import { RouteBullet } from "./RouteBullet";
 import { normalizeWord } from "../spell/letters";
 import { randomSpellable } from "../spell/dictionary";
+import { randomFamous } from "../famous";
 
 interface Props {
   onSubmit: (word: string) => void;
@@ -62,6 +63,17 @@ export function WordInput({ onSubmit, suggestions, recents, favorites, showExtra
             <button className="chip surprise" onClick={() => submit(randomSpellable().toUpperCase())}>
               🎲 Surprise me
             </button>
+            <button className="chip" onClick={() => submit(randomFamous("lyric"))}>
+              🎵 Lyric
+            </button>
+            <button className="chip" onClick={() => submit(randomFamous("quote"))}>
+              💬 Quote
+            </button>
+            <button className="chip" onClick={() => submit(randomFamous("poem"))}>
+              📜 Poem
+            </button>
+          </div>
+          <div className="suggestions">
             {suggestions.map((w) => (
               <button key={w} className="chip" onClick={() => submit(w.toUpperCase())}>
                 {w}

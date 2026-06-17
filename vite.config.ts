@@ -4,9 +4,9 @@ import react from "@vitejs/plugin-react";
 import { VitePWA } from "vite-plugin-pwa";
 
 // https://vite.dev/config/
-// Built for GitHub Pages project site at /train-anagrams/; served from root in dev.
+// Built for GitHub Pages project site at /subway-spell/; served from root in dev.
 export default defineConfig(({ command }) => ({
-  base: command === "build" ? "/train-anagrams/" : "/",
+  base: command === "build" ? "/subway-spell/" : "/",
   plugins: [
     react(),
     VitePWA({
