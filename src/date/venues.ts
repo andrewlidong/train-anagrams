@@ -10,22 +10,32 @@ const OVERPASS_ENDPOINTS = [
   "https://overpass.kumi.systems/api/interpreter",
 ];
 
-const VENUE_CATEGORIES = ["restaurant", "cafe", "bar", "pub", "ice_cream"];
 const SEARCH_RADIUS_M = 1000;
 
 /** Emoji for a venue category, for map markers / itinerary. */
 export function categoryEmoji(category: string): string {
   switch (category) {
+    case "café":
     case "cafe":
       return "☕";
     case "bar":
-    case "pub":
       return "🍸";
-    case "ice_cream":
-      return "🍦";
+    case "park":
+      return "🌳";
+    case "landmark":
+      return "🗽";
     default:
-      return "🍽️";
+      return "📍";
   }
+}
+
+/** Map raw OSM tags into one of our buckets: bar / café / park / landmark. */
+function classify(tags: Record<string, string>): string {
+  if (tags.leisure === "park") return "park";
+  if (tags.tourism || tags.historic) return "landmark";
+  if (tags.amenity === "cafe") return "café";
+  if (tags.amenity === "bar" || tags.amenity === "pub") return "bar";
+  return "landmark";
 }
 
 /** First alphabetic letter of a venue name, ignoring a leading "The ". */
@@ -65,10 +75,15 @@ async function fetchWithTimeout(endpoint: string, body: string, signal?: AbortSi
 }
 
 async function queryOverpass(near: LatLng, signal?: AbortSignal): Promise<OverpassElement[]> {
-  const filter = VENUE_CATEGORIES.join("|");
+  const a = `${SEARCH_RADIUS_M},${near.lat},${near.lng}`;
   const query = `[out:json][timeout:8];
-node["amenity"~"^(${filter})$"]["name"](around:${SEARCH_RADIUS_M},${near.lat},${near.lng});
-out body 80;`;
+(
+  nwr["amenity"~"^(bar|pub|cafe)$"]["name"](around:${a});
+  nwr["leisure"="park"]["name"](around:${a});
+  nwr["tourism"~"^(attraction|museum|gallery|viewpoint|artwork)$"]["name"](around:${a});
+  nwr["historic"~"^(monument|memorial|castle|ruins)$"]["name"](around:${a});
+);
+out center 120;`;
   const body = "data=" + encodeURIComponent(query);
 
   for (const endpoint of OVERPASS_ENDPOINTS) {
@@ -109,7 +124,7 @@ export async function findDateSpot(
       const d = haversineMeters(near, pos);
       if (d < bestDist) {
         bestDist = d;
-        best = { name, category: el.tags?.amenity ?? "restaurant", pos };
+        best = { name, category: classify(el.tags ?? {}), pos };
       }
     }
   } catch {
@@ -121,18 +136,19 @@ export async function findDateSpot(
   return best;
 }
 
-// Curated, real NYC date spots used when Overpass returns nothing.
+// Curated real NYC bars / cafés / parks / landmarks, used when Overpass
+// returns nothing for a letter.
 const FALLBACK: Record<string, Omit<DateSpot, "pos"> & { pos: LatLng }> = {
-  H: { name: "Hearth", category: "restaurant", pos: { lat: 40.7286, lng: -73.9837 } },
-  I: { name: "Il Buco", category: "restaurant", pos: { lat: 40.7257, lng: -73.9925 } },
-  K: { name: "Katz's Delicatessen", category: "restaurant", pos: { lat: 40.7223, lng: -73.9874 } },
-  O: { name: "Oda House", category: "restaurant", pos: { lat: 40.7256, lng: -73.9794 } },
-  P: { name: "Prune", category: "restaurant", pos: { lat: 40.7257, lng: -73.9846 } },
-  T: { name: "The Smith", category: "restaurant", pos: { lat: 40.7305, lng: -73.9886 } },
-  U: { name: "Una Pizza Napoletana", category: "restaurant", pos: { lat: 40.7209, lng: -73.9846 } },
-  V: { name: "Veselka", category: "restaurant", pos: { lat: 40.729, lng: -73.987 } },
-  X: { name: "Xi'an Famous Foods", category: "restaurant", pos: { lat: 40.7196, lng: -73.9931 } },
-  Y: { name: "Yuca Bar", category: "bar", pos: { lat: 40.727, lng: -73.9844 } },
+  H: { name: "High Line", category: "park", pos: { lat: 40.748, lng: -74.0048 } },
+  I: { name: "Irving Farm Coffee Roasters", category: "café", pos: { lat: 40.7345, lng: -73.9823 } },
+  K: { name: "King Cole Bar", category: "bar", pos: { lat: 40.7615, lng: -73.9747 } },
+  O: { name: "Old Town Bar", category: "bar", pos: { lat: 40.7376, lng: -73.9882 } },
+  P: { name: "Paley Park", category: "park", pos: { lat: 40.7596, lng: -73.9742 } },
+  T: { name: "Tompkins Square Park", category: "park", pos: { lat: 40.7268, lng: -73.9815 } },
+  U: { name: "Union Square Park", category: "park", pos: { lat: 40.7359, lng: -73.9911 } },
+  V: { name: "Vol de Nuit", category: "bar", pos: { lat: 40.7307, lng: -74.0006 } },
+  X: { name: "Xocolatti", category: "café", pos: { lat: 40.7232, lng: -74.0006 } },
+  Y: { name: "Yankee Stadium", category: "landmark", pos: { lat: 40.8296, lng: -73.9262 } },
 };
 
 function fallbackSpot(letter: string, near: LatLng): DateSpot | null {
