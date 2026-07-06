@@ -89,7 +89,7 @@ export function Itinerary({ result, activeLeg, favorite, onToggleFavorite }: Pro
     } else {
       rows.push(
         <li key={`w${i}`} className={`step walk${active}`}>
-          🚶 Walk {Math.round(leg.meters)} m to transfer
+          🚶 Walk {Math.round(leg.meters)} m to <em>{leg.to.name}</em>
         </li>,
       );
     }
