@@ -53,17 +53,28 @@ export function Itinerary({ result, activeLeg, favorite, onToggleFavorite }: Pro
     const active = i === activeLeg ? " active" : "";
     if (leg.kind === "ride") {
       rows.push(
-        <li key={`r${i}`} className={`step ride${active}`}>
-          <RouteBullet route={leg.line} size={24} />
-          <span>
-            Ride the <strong>{leg.line}</strong>
-            {leg.letters.length > 1 && <em> (spells {leg.letters})</em>} from <em>{leg.from.name}</em> to{" "}
-            <em>{leg.to.name}</em>
-          </span>
-        </li>,
+        leg.letters === "" ? (
+          // The return half of an out-and-back ride (both neighbors need the
+          // station the line was boarded at).
+          <li key={`r${i}`} className={`step ride${active}`}>
+            <RouteBullet route={leg.line} size={24} />
+            <span>
+              ↩️ Ride the <strong>{leg.line}</strong> back to <em>{leg.to.name}</em>
+            </span>
+          </li>
+        ) : (
+          <li key={`r${i}`} className={`step ride${active}`}>
+            <RouteBullet route={leg.line} size={24} />
+            <span>
+              Ride the <strong>{leg.line}</strong>
+              {leg.letters.length > 1 && <em> (spells {leg.letters})</em>} from <em>{leg.from.name}</em> to{" "}
+              <em>{leg.to.name}</em>
+            </span>
+          </li>
+        ),
       );
       const next = legs[i + 1];
-      if (next && next.kind === "ride") {
+      if (next && next.kind === "ride" && next.line !== leg.line) {
         rows.push(
           <li key={`t${i}`} className="step transfer">
             🔁 Transfer <strong>{leg.line}</strong> → <strong>{next.line}</strong> at <em>{leg.to.name}</em>

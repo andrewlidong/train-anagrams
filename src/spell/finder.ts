@@ -434,7 +434,11 @@ export function itineraryText(result: FinderResult): string {
   const lines = [`Subway Spell — "${result.upper}"`, ""];
   for (const leg of result.legs) {
     if (leg.kind === "ride") {
-      lines.push(`🚆 Ride ${leg.line}: ${leg.from.name} → ${leg.to.name}`);
+      lines.push(
+        leg.letters === ""
+          ? `↩️ Ride ${leg.line} back to ${leg.to.name}`
+          : `🚆 Ride ${leg.line}: ${leg.from.name} → ${leg.to.name}`,
+      );
     } else if (leg.venue) {
       lines.push(`🚶 Walk to ${leg.venue.name} (${leg.venue.category}) for ${leg.letters}`);
     } else if (leg.letter) {
