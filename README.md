@@ -41,12 +41,13 @@ No backend — everything runs in the browser against public open-data APIs.
    connected where a complex serves both (in-system transfer) or where complexes sit within
    ~400 m (out-of-system walking transfer).
 3. **Path-finding** — each lettered train is a single line, so a word fixes the exact line
-   sequence (`MADAGASCAR` → M·A·D·A·G·A·S·C·A·R). Finding the trip is then a small **layered
-   shortest-path** that picks the best transfer station between each pair of lines
-   (`src/spell/finder.ts`). The cost weights strongly **minimize walking** and **force a real ride
-   between distinct stations** (rather than transferring in place), tuned per routing strategy.
-   Doubled letters ride the line once but are still shown (the ZZ in JAZZ), and gaps with no real
-   transfer fall back to a walk.
+   sequence (`MADAGASCAR` → M·A·D·A·G·A·S·C·A·R). Finding the trip is one **word-level layered
+   shortest-path** (`src/spell/finder.ts`): boarding stations, transfer stations, exit stations,
+   *and the walks between train runs* (venue detours for no-train letters) are all chosen
+   together, so every meter walked is part of the optimization. The cost weights strongly
+   **minimize walking** and **force a real ride between distinct stations** (rather than
+   transferring in place), tuned per routing strategy. Doubled letters ride the line once but are
+   still shown (the ZZ in JAZZ), and gaps with no real transfer fall back to a walk.
 4. **Map** — **Leaflet + CARTO/OpenStreetMap** basemaps with the full network drawn in official
    MTA colors. The spelled route is traced along the **real track geometry** (each ride is
    projected onto its line's polyline), and an **animated train** rides the whole path with

@@ -45,6 +45,13 @@ async function footRoute(from: LatLng, to: LatLng, signal?: AbortSignal): Promis
   }
 }
 
+/** Length of a polyline, in meters. */
+function pathMeters(path: LatLng[]): number {
+  let m = 0;
+  for (let i = 1; i < path.length; i++) m += haversineMeters(path[i - 1], path[i]);
+  return m;
+}
+
 /** Attach real on-street geometry to each walk leg (sequential, gentle on OSRM). */
 export async function attachWalkingPaths(result: FinderResult, signal?: AbortSignal): Promise<FinderResult> {
   const hasWalks = result.legs.some((l) => l.kind === "walk" && l.meters > 30);
@@ -54,7 +61,8 @@ export async function attachWalkingPaths(result: FinderResult, signal?: AbortSig
   for (const leg of result.legs) {
     if (leg.kind === "walk" && leg.meters > 30 && haversineMeters(leg.from.pos, leg.to.pos) > 30) {
       const path = await footRoute(leg.from.pos, leg.to.pos, signal);
-      legs.push(path ? { ...leg, path } : leg);
+      // Use the street path's real length so walk stats aren't understated.
+      legs.push(path ? { ...leg, path, meters: pathMeters(path) } : leg);
     } else {
       legs.push(leg);
     }

@@ -94,20 +94,6 @@ interface TransferOption {
 
 const point = (c: Complex): NamedPoint => ({ name: c.name, pos: c.pos });
 
-function nearestOther(list: Complex[], c: Complex): Complex | null {
-  let best: Complex | null = null;
-  let bestDist = Infinity;
-  for (const x of list) {
-    if (x.id === c.id) continue;
-    const d = haversineMeters(x.pos, c.pos);
-    if (d < bestDist) {
-      bestDist = d;
-      best = x;
-    }
-  }
-  return best;
-}
-
 function transferOptions(a: string, b: string, graph: SubwayGraph): TransferOption[] {
   const opts: TransferOption[] = [];
   for (const c of graph.inSystemTransfers(a, b)) {
@@ -133,61 +119,78 @@ function transferOptions(a: string, b: string, graph: SubwayGraph): TransferOpti
   return opts;
 }
 
-interface RunResult {
-  legs: ItineraryLeg[];
-  boardPoint: NamedPoint;
-  endPoint: NamedPoint;
-  notes: string[];
+// The whole word is solved as ONE layered shortest-path: board stations,
+// transfer stations, and end stations are all layers, and the walk gaps
+// between train runs (missing-letter venue detours) are edges weighted by
+// w.walk — so the optimizer sees, and minimizes, every meter walked.
+interface DpNode {
+  arrive: Complex; // where the incoming edge lands
+  depart: Complex; // where the outgoing edge leaves (differs for walking transfers)
+  walkIn: number; // meters walked inside the node (out-of-system transfer)
 }
 
-/** Solve a maximal run of consecutive train legs into an itinerary. */
-function solveTrainRun(wordLegs: WordLeg[], graph: SubwayGraph, w: Weights, variant: number): RunResult | null {
+interface DpLayer {
+  nodes: DpNode[];
+  /** How you reach this layer: ride a line, walk a wildcard gap, or nothing (first layer). */
+  edge: "ride" | "gap" | null;
+  /** Line ridden / letters spelled on a "ride" edge. */
+  line?: string;
+  letters?: string;
+  /** Missing-letter runs spelled while walking a "gap" edge. */
+  gapRuns?: string[];
+}
+
+const asNode = (c: Complex): DpNode => ({ arrive: c, depart: c, walkIn: 0 });
+
+/** Layers for one maximal run of train legs: board → transfers → end. */
+function buildRunLayers(wordLegs: WordLeg[], graph: SubwayGraph): DpLayer[] | null {
   const lines = wordLegs.map((l) => l.line!);
-  const runLetters = wordLegs.map((l) => l.letters);
   if (lines.some((l) => graph.complexesServingLine(l).length === 0)) return null;
-  const notes: string[] = [];
 
-  if (lines.length === 1) {
-    const cs = graph.complexesServingLine(lines[0]);
-    const board = cs[0];
-    const end = nearestOther(cs, board) ?? board;
-    return {
-      legs: [
-        { kind: "ride", letter: lines[0], letters: runLetters[0], line: lines[0], from: point(board), to: point(end) },
-      ],
-      boardPoint: point(board),
-      endPoint: point(end),
-      notes,
-    };
-  }
-
-  const k = lines.length - 1; // number of transitions
-  const optionsPerT: TransferOption[][] = [];
-  for (let t = 0; t < k; t++) {
+  const layers: DpLayer[] = [{ nodes: graph.complexesServingLine(lines[0]).map(asNode), edge: null }];
+  for (let t = 0; t < lines.length - 1; t++) {
     const opts = transferOptions(lines[t], lines[t + 1], graph);
     if (opts.length === 0) return null;
-    optionsPerT.push(opts);
+    layers.push({
+      nodes: opts.map((o) => ({ arrive: o.arrive, depart: o.depart, walkIn: o.walk })),
+      edge: "ride",
+      line: lines[t],
+      letters: wordLegs[t].letters,
+    });
   }
+  const last = lines.length - 1;
+  layers.push({
+    nodes: graph.complexesServingLine(lines[last]).map(asNode),
+    edge: "ride",
+    line: lines[last],
+    letters: wordLegs[last].letters,
+  });
+  return layers;
+}
 
+/** Shortest path through the layers; returns the chosen node index per layer. */
+function solveLayers(layers: DpLayer[], w: Weights, variant: number): number[] {
   // Jitter for "another route": big enough to reshuffle which distinct station
   // is chosen, but capped below samePenalty/walk so it never turns a real ride
   // into a same-station transfer or a walk.
   const jitterScale = variant ? Math.min(w.samePenalty * 0.4, 1500) : 0;
 
-  // Layered DP over candidate transfer stations, weighted by the strategy.
-  let prevCost = optionsPerT[0].map((o, i) => o.walk * w.walk + jitter(variant * 131 + i) * jitterScale);
+  let prevCost = layers[0].nodes.map(
+    (n, i) => n.walkIn * w.walk + jitter(variant * 131 + i) * jitterScale,
+  );
   const back: number[][] = [];
-  for (let t = 1; t < k; t++) {
-    const cur = optionsPerT[t];
-    const prev = optionsPerT[t - 1];
-    const curCost = new Array<number>(cur.length).fill(Infinity);
-    const curBack = new Array<number>(cur.length).fill(-1);
-    for (let i = 0; i < cur.length; i++) {
-      const extra = jitter(variant * 131 + t * 17 + i * 7) * jitterScale;
-      for (let j = 0; j < prev.length; j++) {
-        const ride = haversineMeters(prev[j].depart.pos, cur[i].arrive.pos);
-        let cost = prevCost[j] + ride * w.ride + cur[i].walk * w.walk + extra;
-        if (ride < SAME_STATION_RIDE_M) cost += w.samePenalty; // force a real ride between transfers
+  for (let t = 1; t < layers.length; t++) {
+    const layer = layers[t];
+    const prev = layers[t - 1];
+    const curCost = new Array<number>(layer.nodes.length).fill(Infinity);
+    const curBack = new Array<number>(layer.nodes.length).fill(-1);
+    for (let i = 0; i < layer.nodes.length; i++) {
+      const n = layer.nodes[i];
+      const extra = n.walkIn * w.walk + jitter(variant * 131 + t * 17 + i * 7) * jitterScale;
+      for (let j = 0; j < prev.nodes.length; j++) {
+        const dist = haversineMeters(prev.nodes[j].depart.pos, n.arrive.pos);
+        let cost = prevCost[j] + extra + dist * (layer.edge === "gap" ? w.walk : w.ride);
+        if (layer.edge === "ride" && dist < SAME_STATION_RIDE_M) cost += w.samePenalty; // force a real ride
         if (cost < curCost[i]) {
           curCost[i] = cost;
           curBack[i] = j;
@@ -200,48 +203,57 @@ function solveTrainRun(wordLegs: WordLeg[], graph: SubwayGraph, w: Weights, vari
 
   let bestI = 0;
   for (let i = 1; i < prevCost.length; i++) if (prevCost[i] < prevCost[bestI]) bestI = i;
-  const chosen = new Array<number>(k);
-  chosen[k - 1] = bestI;
-  for (let t = k - 2; t >= 0; t--) chosen[t] = back[t][chosen[t + 1]];
-  const opts = chosen.map((idx, t) => optionsPerT[t][idx]);
+  const chosen = new Array<number>(layers.length);
+  chosen[layers.length - 1] = bestI;
+  for (let t = layers.length - 2; t >= 0; t--) chosen[t] = back[t][chosen[t + 1]];
+  return chosen;
+}
 
-  const board = nearestOther(graph.complexesServingLine(lines[0]), opts[0].arrive) ?? opts[0].arrive;
-  const end =
-    nearestOther(graph.complexesServingLine(lines[k]), opts[k - 1].depart) ?? opts[k - 1].depart;
-
+/** Turn the chosen path through the layers into itinerary legs. */
+function emitLegs(layers: DpLayer[], chosen: number[]): { legs: ItineraryLeg[]; notes: string[] } {
   const legs: ItineraryLeg[] = [];
-  legs.push({
-    kind: "ride",
-    letter: lines[0],
-    letters: runLetters[0],
-    line: lines[0],
-    from: point(board),
-    to: point(opts[0].arrive),
-  });
-  for (let t = 0; t < k; t++) {
-    const o = opts[t];
-    if (o.walk > 0 && o.arrive.id !== o.depart.id) {
-      legs.push({ kind: "walk", letter: null, letters: "", from: point(o.arrive), to: point(o.depart), meters: o.walk });
-      if (o.walk > WALK_TRANSFER_METERS) {
+  const notes: string[] = [];
+  for (let t = 1; t < layers.length; t++) {
+    const layer = layers[t];
+    const prev = layers[t - 1].nodes[chosen[t - 1]];
+    const cur = layer.nodes[chosen[t]];
+    if (layer.edge === "ride") {
+      legs.push({
+        kind: "ride",
+        letter: layer.line!,
+        letters: layer.letters!,
+        line: layer.line!,
+        from: point(prev.depart),
+        to: point(cur.arrive),
+      });
+    } else {
+      const from = point(prev.depart);
+      const to = point(cur.arrive);
+      if (layer.gapRuns!.length > 0) {
+        legs.push(...wildcardWalks(layer.gapRuns!, from, to));
+      } else if (haversineMeters(from.pos, to.pos) > 30) {
+        legs.push({ kind: "walk", letter: null, letters: "", from, to, meters: haversineMeters(from.pos, to.pos) });
+      }
+    }
+    if (cur.walkIn > 0 && cur.arrive.id !== cur.depart.id) {
+      legs.push({
+        kind: "walk",
+        letter: null,
+        letters: "",
+        from: point(cur.arrive),
+        to: point(cur.depart),
+        meters: cur.walkIn,
+      });
+      if (cur.walkIn > WALK_TRANSFER_METERS) {
         notes.push(
-          `No direct transfer from ${lines[t]} to ${lines[t + 1]} — a ${Math.round(
-            o.walk,
+          `No direct transfer from ${layer.line} to ${layers[t + 1]?.line} — a ${Math.round(
+            cur.walkIn,
           )} m walk is required.`,
         );
       }
     }
-    const to = t + 1 < k ? point(opts[t + 1].arrive) : point(end);
-    legs.push({
-      kind: "ride",
-      letter: lines[t + 1],
-      letters: runLetters[t + 1],
-      line: lines[t + 1],
-      from: point(o.depart),
-      to,
-    });
   }
-
-  return { legs, boardPoint: point(board), endPoint: point(end), notes };
+  return { legs, notes };
 }
 
 function lerp(a: LatLng, b: LatLng, t: number): LatLng {
@@ -302,31 +314,47 @@ export function findPath(word: string, graph: SubwayGraph, opts: RouteOptions = 
     else segments.push({ type: leg.type, legs: [leg] });
   }
 
-  const out: ItineraryLeg[] = [];
-  let feasible = false;
-  let prevEnd: NamedPoint | null = null;
+  // Chain every run into one global DP: the wildcard walks between runs become
+  // "gap" edges, so board/end stations are chosen to keep those walks short.
+  const layers: DpLayer[] = [];
+  let leadingWalks: string[] = [];
   let pendingWalks: string[] = [];
-
   for (const seg of segments) {
     if (seg.type === "walk") {
       pendingWalks.push(...seg.legs.map((l) => l.letters));
       continue;
     }
-    const run = solveTrainRun(seg.legs, graph, weights, variant);
-    if (!run) {
+    const runLayers = buildRunLayers(seg.legs, graph);
+    if (!runLayers) {
       notes.push("Some lines in this word aren't in the data feed.");
       continue;
     }
-    feasible = true;
-    notes.push(...run.notes);
-
-    if (pendingWalks.length > 0) {
-      const anchorFrom = prevEnd ?? { name: "start", pos: offset(run.boardPoint.pos, -2) };
-      out.push(...wildcardWalks(pendingWalks, anchorFrom, run.boardPoint));
-      pendingWalks = [];
+    if (layers.length === 0) {
+      leadingWalks = pendingWalks;
+    } else {
+      runLayers[0] = { ...runLayers[0], edge: "gap", gapRuns: pendingWalks };
     }
-    out.push(...run.legs);
-    prevEnd = run.endPoint;
+    layers.push(...runLayers);
+    pendingWalks = [];
+  }
+
+  const out: ItineraryLeg[] = [];
+  const feasible = layers.length > 0;
+  let prevEnd: NamedPoint | null = null;
+
+  if (feasible) {
+    const chosen = solveLayers(layers, weights, variant);
+    const { legs, notes: legNotes } = emitLegs(layers, chosen);
+    notes.push(...legNotes);
+
+    if (leadingWalks.length > 0) {
+      const boardPoint = point(layers[0].nodes[chosen[0]].arrive);
+      const anchorFrom = { name: "start", pos: offset(boardPoint.pos, -2) };
+      out.push(...wildcardWalks(leadingWalks, anchorFrom, boardPoint));
+    }
+    out.push(...legs);
+    const lastLayer = layers[layers.length - 1];
+    prevEnd = point(lastLayer.nodes[chosen[chosen.length - 1]].depart);
   }
 
   // Trailing wildcard letters after the last train run.
@@ -358,7 +386,7 @@ export function itineraryText(result: FinderResult): string {
     } else if (leg.letter) {
       lines.push(`🚶 Walk for ${leg.letters}`);
     } else {
-      lines.push(`🚶 Walk ${Math.round(leg.meters)} m to transfer`);
+      lines.push(`🚶 Walk ${Math.round(leg.meters)} m to ${leg.to.name}`);
     }
   }
   return lines.join("\n");
