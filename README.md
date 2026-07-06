@@ -46,8 +46,11 @@ No backend — everything runs in the browser against public open-data APIs.
    *and the walks between train runs* (venue detours for no-train letters) are all chosen
    together, so every meter walked is part of the optimization. The cost weights strongly
    **minimize walking** and **force a real ride between distinct stations** (rather than
-   transferring in place), tuned per routing strategy. Doubled letters ride the line once but are
-   still shown (the ZZ in JAZZ), and gaps with no real transfer fall back to a walk.
+   transferring in place), tuned per routing strategy. Every ride is physically ridable — the
+   three disconnected S shuttles are never mixed up, and when both neighbors pin a leg to one
+   station (E→G→E can only transfer at Court Sq) it's spelled by riding out one stop and back.
+   Doubled letters ride the line once but are still shown (the ZZ in JAZZ), and gaps with no
+   real transfer fall back to a walk.
 4. **Map** — **Leaflet + CARTO/OpenStreetMap** basemaps with the full network drawn in official
    MTA colors. The spelled route is traced along the **real track geometry** (each ride is
    projected onto its line's polyline), and an **animated train** rides the whole path with

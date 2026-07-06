@@ -37,6 +37,24 @@ describe("SubwayGraph transfers", () => {
   });
 });
 
+describe("sameLineCluster", () => {
+  // Like the "S" shuttles: one line label, two far-apart pieces of track.
+  const complexes = buildComplexes([
+    station("Shuttle A1", "a1", ["S"], 40.755, -73.987),
+    station("Shuttle A2", "a2", ["S"], 40.752, -73.977),
+    station("Shuttle B1", "b1", ["S"], 40.681, -73.956),
+    station("Shuttle B2", "b2", ["S"], 40.674, -73.959),
+  ]);
+  const graph = new SubwayGraph(complexes);
+  const at = (id: string) => complexes.find((c) => c.id === id)!;
+
+  it("groups nearby stations and separates disconnected pieces", () => {
+    expect(graph.sameLineCluster("S", at("a1"), at("a2"))).toBe(true);
+    expect(graph.sameLineCluster("S", at("b1"), at("b2"))).toBe(true);
+    expect(graph.sameLineCluster("S", at("a1"), at("b1"))).toBe(false);
+  });
+});
+
 describe("haversineMeters", () => {
   it("is ~0 for identical points and positive otherwise", () => {
     const a = { lat: 40.7, lng: -74.0 };

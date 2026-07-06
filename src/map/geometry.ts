@@ -9,7 +9,11 @@ export type LineIndex = Map<string, LatLng[][]>;
 
 export function buildLineIndex(lines: LineGeometry[]): LineIndex {
   const index: LineIndex = new Map();
-  for (const line of lines) index.set(line.service.toUpperCase(), line.paths);
+  for (const line of lines) {
+    // A service can span multiple data rows (branches/sections) — merge them.
+    const key = line.service.toUpperCase();
+    index.set(key, [...(index.get(key) ?? []), ...line.paths]);
+  }
   return index;
 }
 

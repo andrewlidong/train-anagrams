@@ -5,6 +5,13 @@ import type { Complex, LatLng, Station } from "../types";
 /** Max walking distance (meters) treated as an out-of-system transfer. */
 export const WALK_TRANSFER_METERS = 400;
 
+/**
+ * Stations of one line farther apart than this (with no station between) are
+ * treated as disconnected pieces of track. The widest real gap is the A
+ * across Jamaica Bay (~5.6 km); the three "S" shuttles sit ~9 km+ apart.
+ */
+export const LINE_CLUSTER_METERS = 6500;
+
 const EARTH_RADIUS_M = 6_371_000;
 
 /** Great-circle distance between two points, in meters. */
@@ -65,6 +72,8 @@ export class SubwayGraph {
   private byLine = new Map<string, Complex[]>();
   /** Lines reachable from a line (in-system or walking). */
   private adjacency = new Map<string, Set<string>>();
+  /** Per line: complex id → connected-piece id (lazy; see LINE_CLUSTER_METERS). */
+  private lineClusters = new Map<string, Map<string, number>>();
 
   constructor(complexes: Complex[]) {
     this.complexes = complexes;
@@ -136,6 +145,33 @@ export class SubwayGraph {
   /** Complexes that serve BOTH lines (in-system transfer points). */
   inSystemTransfers(a: string, b: string): Complex[] {
     return this.complexesServingLine(a).filter((c) => c.routes.includes(b));
+  }
+
+  private clustersFor(line: string): Map<string, number> {
+    const cached = this.lineClusters.get(line);
+    if (cached) return cached;
+    const cs = this.complexesServingLine(line);
+    const parent = cs.map((_, i) => i);
+    const find = (x: number): number => (parent[x] === x ? x : (parent[x] = find(parent[x])));
+    for (let i = 0; i < cs.length; i++) {
+      for (let j = i + 1; j < cs.length; j++) {
+        if (haversineMeters(cs[i].pos, cs[j].pos) <= LINE_CLUSTER_METERS) parent[find(i)] = find(j);
+      }
+    }
+    const ids = new Map<string, number>();
+    cs.forEach((c, i) => ids.set(c.id, find(i)));
+    this.lineClusters.set(line, ids);
+    return ids;
+  }
+
+  /**
+   * True if you can actually ride `line` between the two complexes — i.e.
+   * they sit on the same connected piece of the line. The three "S" shuttles,
+   * for example, all spell S but you can't ride from one to another.
+   */
+  sameLineCluster(line: string, a: Complex, b: Complex): boolean {
+    const ids = this.clustersFor(line);
+    return ids.get(a.id) === ids.get(b.id);
   }
 
   /** Nearby complex pairs allowing a walking transfer between the lines. */

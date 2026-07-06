@@ -18,7 +18,7 @@ const complexes = buildComplexes([
   station("A/C", "ac", ["A", "C"], 40.720, -74.00),
   station("C/E", "ce", ["C", "E"], 40.730, -74.00),
   station("E end", "e0", ["E"], 40.740, -74.00),
-  station("G far", "g1", ["G"], 40.800, -73.95),
+  station("G far", "g1", ["G"], 40.750, -73.98),
   station("G near", "g2", ["G"], 40.712, -74.001),
   station("D a", "d1", ["D"], 40.700, -74.002),
   station("D b", "d2", ["D"], 40.706, -74.001),
@@ -107,6 +107,18 @@ describe("findPath", () => {
         expect(haversineMeters(legs[i - 1].to.pos, legs[i].from.pos)).toBeLessThan(5);
       }
     }
+  });
+
+  it("spells a pinned letter by riding out and back, not with a 0 m ride", () => {
+    // ECE: the only E<->C transfer is the "C/E" complex, so the C leg is
+    // pinned there — it should ride out to another C station and back.
+    const result = findPath("ECE", graph);
+    const rides = result.legs.filter((l) => l.kind === "ride");
+    for (const ride of rides) {
+      expect(haversineMeters(ride.from.pos, ride.to.pos)).toBeGreaterThan(60);
+    }
+    expect(result.legs.map((l) => l.letters).join("")).toBe("ECE");
+    expect(result.notes.some((n) => n.includes("riding out"))).toBe(true);
   });
 
   it("never walks more on least-walk than on scenic", () => {
