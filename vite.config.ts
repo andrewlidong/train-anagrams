@@ -45,7 +45,7 @@ export default defineConfig(({ command }) => ({
             },
           },
           {
-            urlPattern: /^https:\/\/([a-d]\.basemaps\.cartocdn\.com|tile\.openstreetmap\.org)\//,
+            urlPattern: /^https:\/\/(server\.arcgisonline\.com|tile\.openstreetmap\.org)\//,
             handler: "CacheFirst",
             options: {
               cacheName: "map-tiles",

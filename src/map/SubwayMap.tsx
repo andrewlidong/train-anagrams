@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { CircleMarker, LayersControl, MapContainer, Polyline, TileLayer, Tooltip, useMap } from "react-leaflet";
+import { CircleMarker, LayerGroup, LayersControl, MapContainer, Polyline, TileLayer, Tooltip, useMap } from "react-leaflet";
 import type { LatLngBoundsExpression } from "leaflet";
 import { toPng } from "html-to-image";
 import type { Complex, LineGeometry } from "../types";
@@ -9,6 +9,9 @@ import { PathLayer } from "./PathLayer";
 import { TrainAnimation } from "./TrainAnimation";
 import { SpellingStrip } from "../components/SpellingStrip";
 import { buildLineIndex } from "./geometry";
+
+const ESRI_CANVAS = "https://server.arcgisonline.com/ArcGIS/rest/services/Canvas";
+const ESRI_ATTRIBUTION = 'Tiles &copy; <a href="https://www.esri.com/">Esri</a> &mdash; Esri, HERE, Garmin, &copy; OpenStreetMap contributors';
 
 const NYC_CENTER: [number, number] = [40.7306, -73.9866];
 
@@ -123,21 +126,38 @@ export function SubwayMap({ lines, complexes, legs, activeLeg, onLegChange, word
     <div className="map-shell" ref={shellRef}>
       <MapContainer center={NYC_CENTER} zoom={12} className="map" scrollWheelZoom preferCanvas>
         <LayersControl position="topright">
+          {/* CARTO's basemaps stopped serving keyless tiles (Sept 2026), so the
+              Clean/Dark styles use Esri's keyless gray canvases: an unlabeled
+              base plus a labels overlay. Native tiles stop at z16. */}
           <LayersControl.BaseLayer checked name="Clean">
-            <TileLayer
-              attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>'
-              url="https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png"
-              subdomains="abcd"
-              crossOrigin="anonymous"
-            />
+            <LayerGroup>
+              <TileLayer
+                attribution={ESRI_ATTRIBUTION}
+                url={`${ESRI_CANVAS}/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}`}
+                maxNativeZoom={16}
+                crossOrigin="anonymous"
+              />
+              <TileLayer
+                url={`${ESRI_CANVAS}/World_Light_Gray_Reference/MapServer/tile/{z}/{y}/{x}`}
+                maxNativeZoom={16}
+                crossOrigin="anonymous"
+              />
+            </LayerGroup>
           </LayersControl.BaseLayer>
           <LayersControl.BaseLayer name="Dark">
-            <TileLayer
-              attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>'
-              url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
-              subdomains="abcd"
-              crossOrigin="anonymous"
-            />
+            <LayerGroup>
+              <TileLayer
+                attribution={ESRI_ATTRIBUTION}
+                url={`${ESRI_CANVAS}/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}`}
+                maxNativeZoom={16}
+                crossOrigin="anonymous"
+              />
+              <TileLayer
+                url={`${ESRI_CANVAS}/World_Dark_Gray_Reference/MapServer/tile/{z}/{y}/{x}`}
+                maxNativeZoom={16}
+                crossOrigin="anonymous"
+              />
+            </LayerGroup>
           </LayersControl.BaseLayer>
           <LayersControl.BaseLayer name="Streets">
             <TileLayer
