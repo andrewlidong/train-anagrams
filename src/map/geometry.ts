@@ -7,9 +7,18 @@ import { haversineMeters } from "../data/buildGraph";
 /** Lookup from a service id (e.g. "A") to its polyline segments. */
 export type LineIndex = Map<string, LatLng[][]>;
 
+// The geometry feed labels the shuttles SF (Franklin), ST (42 St) and SR
+// (Rockaway), but stations — and our ride legs — call them all "S".
+const SERVICE_ALIAS: Record<string, string> = { SF: "S", ST: "S", SR: "S" };
+
 export function buildLineIndex(lines: LineGeometry[]): LineIndex {
   const index: LineIndex = new Map();
-  for (const line of lines) index.set(line.service.toUpperCase(), line.paths);
+  for (const line of lines) {
+    // A service can span multiple data rows (branches/sections) — merge them.
+    const raw = line.service.toUpperCase();
+    const key = SERVICE_ALIAS[raw] ?? raw;
+    index.set(key, [...(index.get(key) ?? []), ...line.paths]);
+  }
   return index;
 }
 

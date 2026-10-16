@@ -5,11 +5,10 @@ import type { Complex, LatLng } from "../types";
 import { SubwayGraph, WALK_TRANSFER_METERS, haversineMeters } from "../data/buildGraph";
 import { normalizeWord, wordToLegs, missingLetters, type WordLeg } from "./letters";
 
-// Every strategy strongly avoids walking and strongly prefers actually riding a
-// train between distinct stations (rather than transferring in place). They
-// differ only in how much ride length matters once those are satisfied.
-//   walk >> samePenalty >> ride  — so it never walks to dodge a same-station
-//   transfer, and never picks a same-station transfer when a real ride exists.
+// Every strategy strongly avoids walking, and a same-station "ride" is
+// forbidden outright — every ride goes between distinct stations — falling
+// back to the strategy's samePenalty only when no real ride exists at all.
+// The weights differ in how much ride length matters once that's satisfied.
 export type RouteStrategy = "scenic" | "least-walk" | "fastest";
 
 interface Weights {
@@ -96,25 +95,33 @@ const point = (c: Complex): NamedPoint => ({ name: c.name, pos: c.pos });
 
 function transferOptions(a: string, b: string, graph: SubwayGraph): TransferOption[] {
   const opts: TransferOption[] = [];
+  const seen = new Set<string>();
+  const add = (o: TransferOption) => {
+    const key = `${o.arrive.id}:${o.depart.id}`;
+    if (!seen.has(key)) {
+      seen.add(key);
+      opts.push(o);
+    }
+  };
   for (const c of graph.inSystemTransfers(a, b)) {
-    opts.push({ arrive: c, depart: c, walk: 0 });
+    add({ arrive: c, depart: c, walk: 0 });
   }
   for (const w of graph.walkingTransfers(a, b)) {
-    opts.push({ arrive: w.a, depart: w.b, walk: w.meters });
+    add({ arrive: w.a, depart: w.b, walk: w.meters });
   }
-  if (opts.length === 0) {
-    // No real transfer: bridge with the shortest possible walk between the
-    // two lines (surfaced to the user as a long walk).
-    const as = graph.complexesServingLine(a);
-    const bs = graph.complexesServingLine(b);
+  // Also offer, for every station on line a, a bridge walk to its nearest
+  // station on line b (surfaced to the user as a long walk). The walk cost
+  // keeps these out of normal routes, but they give the optimizer an escape
+  // hatch when the real transfers would force an unridable leg — e.g. when
+  // the only shared station is on a different piece of the "S" shuttle.
+  const bs = graph.complexesServingLine(b);
+  for (const ca of graph.complexesServingLine(a)) {
     let best: TransferOption | null = null;
-    for (const ca of as) {
-      for (const cb of bs) {
-        const d = haversineMeters(ca.pos, cb.pos);
-        if (!best || d < best.walk) best = { arrive: ca, depart: cb, walk: d };
-      }
+    for (const cb of bs) {
+      const d = haversineMeters(ca.pos, cb.pos);
+      if (!best || d < best.walk) best = { arrive: ca, depart: cb, walk: d };
     }
-    if (best) opts.push(best);
+    if (best) add(best);
   }
   return opts;
 }
@@ -168,8 +175,15 @@ function buildRunLayers(wordLegs: WordLeg[], graph: SubwayGraph): DpLayer[] | nu
   return layers;
 }
 
+// A ride between disconnected pieces of a line (two different S shuttles) is
+// physically impossible; this penalty sits way above any real-world cost so
+// the DP only ever accepts one when the word allows nothing else. Same-station
+// "rides" use the strategy's soft samePenalty instead — they get emitted as a
+// real out-and-back ride, so they're a boring-but-honest last resort, not a lie.
+const IMPOSSIBLE_RIDE_COST = 1e9;
+
 /** Shortest path through the layers; returns the chosen node index per layer. */
-function solveLayers(layers: DpLayer[], w: Weights, variant: number): number[] {
+function solveLayers(layers: DpLayer[], graph: SubwayGraph, w: Weights, variant: number): number[] {
   // Jitter for "another route": big enough to reshuffle which distinct station
   // is chosen, but capped below samePenalty/walk so it never turns a real ride
   // into a same-station transfer or a walk.
@@ -188,9 +202,13 @@ function solveLayers(layers: DpLayer[], w: Weights, variant: number): number[] {
       const n = layer.nodes[i];
       const extra = n.walkIn * w.walk + jitter(variant * 131 + t * 17 + i * 7) * jitterScale;
       for (let j = 0; j < prev.nodes.length; j++) {
-        const dist = haversineMeters(prev.nodes[j].depart.pos, n.arrive.pos);
+        const from = prev.nodes[j].depart;
+        const dist = haversineMeters(from.pos, n.arrive.pos);
         let cost = prevCost[j] + extra + dist * (layer.edge === "gap" ? w.walk : w.ride);
-        if (layer.edge === "ride" && dist < SAME_STATION_RIDE_M) cost += w.samePenalty; // force a real ride
+        if (layer.edge === "ride") {
+          if (!graph.sameLineCluster(layer.line!, from, n.arrive)) cost += IMPOSSIBLE_RIDE_COST;
+          else if (dist < SAME_STATION_RIDE_M) cost += w.samePenalty; // emitted as an out-and-back ride
+        }
         if (cost < curCost[i]) {
           curCost[i] = cost;
           curBack[i] = j;
@@ -209,8 +227,26 @@ function solveLayers(layers: DpLayer[], w: Weights, variant: number): number[] {
   return chosen;
 }
 
+/** The nearest other complex you can actually ride `line` to from `c`. */
+function nearestRideable(graph: SubwayGraph, line: string, c: Complex): Complex | null {
+  let best: Complex | null = null;
+  let bestDist = Infinity;
+  for (const x of graph.complexesServingLine(line)) {
+    const d = haversineMeters(x.pos, c.pos);
+    if (d < SAME_STATION_RIDE_M || d >= bestDist) continue;
+    if (!graph.sameLineCluster(line, c, x)) continue;
+    bestDist = d;
+    best = x;
+  }
+  return best;
+}
+
 /** Turn the chosen path through the layers into itinerary legs. */
-function emitLegs(layers: DpLayer[], chosen: number[]): { legs: ItineraryLeg[]; notes: string[] } {
+function emitLegs(
+  layers: DpLayer[],
+  chosen: number[],
+  graph: SubwayGraph,
+): { legs: ItineraryLeg[]; notes: string[] } {
   const legs: ItineraryLeg[] = [];
   const notes: string[] = [];
   for (let t = 1; t < layers.length; t++) {
@@ -218,14 +254,32 @@ function emitLegs(layers: DpLayer[], chosen: number[]): { legs: ItineraryLeg[]; 
     const prev = layers[t - 1].nodes[chosen[t - 1]];
     const cur = layer.nodes[chosen[t]];
     if (layer.edge === "ride") {
-      legs.push({
-        kind: "ride",
-        letter: layer.line!,
-        letters: layer.letters!,
-        line: layer.line!,
-        from: point(prev.depart),
-        to: point(cur.arrive),
-      });
+      const line = layer.line!;
+      const dist = haversineMeters(prev.depart.pos, cur.arrive.pos);
+      const turnaround = dist < SAME_STATION_RIDE_M ? nearestRideable(graph, line, cur.arrive) : null;
+      if (turnaround) {
+        // Both neighbors need this station: spell the letter by riding out
+        // one stop and back rather than pretending a 0 m "ride" happened.
+        legs.push(
+          { kind: "ride", letter: line, letters: layer.letters!, line, from: point(prev.depart), to: point(turnaround) },
+          { kind: "ride", letter: line, letters: "", line, from: point(turnaround), to: point(cur.arrive) },
+        );
+        notes.push(`The ${line} is spelled by riding out to ${turnaround.name} and back to ${cur.arrive.name}.`);
+      } else {
+        if (!graph.sameLineCluster(line, prev.depart, cur.arrive)) {
+          notes.push(
+            `The ${line} doesn't actually run between ${prev.depart.name} and ${cur.arrive.name} — no ridable route spells this stretch.`,
+          );
+        }
+        legs.push({
+          kind: "ride",
+          letter: line,
+          letters: layer.letters!,
+          line,
+          from: point(prev.depart),
+          to: point(cur.arrive),
+        });
+      }
     } else {
       const from = point(prev.depart);
       const to = point(cur.arrive);
@@ -343,8 +397,8 @@ export function findPath(word: string, graph: SubwayGraph, opts: RouteOptions = 
   let prevEnd: NamedPoint | null = null;
 
   if (feasible) {
-    const chosen = solveLayers(layers, weights, variant);
-    const { legs, notes: legNotes } = emitLegs(layers, chosen);
+    const chosen = solveLayers(layers, graph, weights, variant);
+    const { legs, notes: legNotes } = emitLegs(layers, chosen, graph);
     notes.push(...legNotes);
 
     if (leadingWalks.length > 0) {
@@ -380,7 +434,11 @@ export function itineraryText(result: FinderResult): string {
   const lines = [`Subway Spell — "${result.upper}"`, ""];
   for (const leg of result.legs) {
     if (leg.kind === "ride") {
-      lines.push(`🚆 Ride ${leg.line}: ${leg.from.name} → ${leg.to.name}`);
+      lines.push(
+        leg.letters === ""
+          ? `↩️ Ride ${leg.line} back to ${leg.to.name}`
+          : `🚆 Ride ${leg.line}: ${leg.from.name} → ${leg.to.name}`,
+      );
     } else if (leg.venue) {
       lines.push(`🚶 Walk to ${leg.venue.name} (${leg.venue.category}) for ${leg.letters}`);
     } else if (leg.letter) {
